@@ -1445,7 +1445,7 @@ terraform apply plan.bin</code>
             <section id="tf-usecases" class="tf-section">
               <div class="tf-section-header">
                 <h2>10. Quick Use-Case Index (What to Use for What)</h2>
-                <span class="tf-badge">Cheat Sheet</span>
+              <span class="tf-badge">Cheat Sheet</span>
               </div>
               <p class="tf-tagline">
                 Map real-world tasks to Terraform language options. This is the “decision logic” view.
@@ -1494,8 +1494,8 @@ terraform apply plan.bin</code>
               </table>
 
               <p class="tf-note">
-                Extend this table with your own patterns (e.g., “court-to-court secure link”,
-                “L5/L6 isolated zone”, “CJIS-compliant data enclave”) and tie each to modules,
+                Extend this table with your own patterns (e.g., “internal SaaS onboarding”,
+                “regulated data enclave”, “edge location pattern”) and tie each to modules,
                 providers, and meta-arguments in this encyclopedia.
               </p>
             </section>
@@ -1708,7 +1708,7 @@ terraform apply plan.bin</code>
                     <td>Tenancy & Compartments</td>
                     <td>Tenancy, Compartments</td>
                     <td><code>oci_identity_compartment</code>, <code>oci_identity_tenancy</code> (data)</td>
-                    <td>Pattern: CCoE defines a standard compartment layout per court/app; use <code>for_each</code> across compartments.</td>
+                    <td>Pattern: platform team defines a standard compartment layout per business unit/app; use <code>for_each</code> across compartments.</td>
                   </tr>
                   <tr>
                     <td>Networking</td>
@@ -1757,9 +1757,22 @@ terraform apply plan.bin</code>
                 <span class="tf-badge">Governance</span>
               </div>
               <p class="tf-tagline">
-                This section is the bridge from your court / enterprise requirements into concrete
-                Terraform options: which providers, which modules, which language features.
+                This is the “translator” layer. You start with a sentence like
+                <em>“We need X environment for Y app under Z rules”</em> and this section tells you:
+                1) which clouds/services to combine, 2) which Terraform modules to call, and
+                3) which language features you actually use.
               </p>
+
+              <h3>15.0 How to Use This Section</h3>
+              <ol class="tf-list">
+                <li><strong>Pick the requirement pattern</strong> that looks closest to what you need.</li>
+                <li><strong>Steal the provider/module stack</strong> from the table: that’s your
+                  “Terraform recipe name” (e.g. <code>landing_zone</code> module + <code>aws</code>/<code>azurerm</code>).</li>
+                <li><strong>Copy the language options</strong> (modules, <code>for_each</code>, objects, functions)
+                  into the module or root config you’re wiring.</li>
+                <li><strong>Refine the pattern</strong> by adding your own row with tighter constraints
+                  (e.g. “regulated-data-landing-zone”, “internet-facing-app-stack”).</li>
+              </ol>
 
               <h3>15.1 Decision Table (Abstract Requirement → Terraform Stack)</h3>
               <table class="tf-table">
@@ -1767,63 +1780,215 @@ terraform apply plan.bin</code>
                   <tr>
                     <th>Requirement Pattern</th>
                     <th>Cloud Options</th>
-                    <th>Terraform Providers & Modules</th>
-                    <th>Language Options</th>
+                    <th>Terraform Providers &amp; Modules</th>
+                    <th>Language Options (What You Actually Use)</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Isolated secure landing zone (per court/tenant)</td>
-                    <td>AWS accounts, Azure subscriptions, GCP projects, OCI compartments, dedicated VPC/VNet/VCN</td>
-                    <td><code>aws</code>/<code>azurerm</code>/<code>google</code>/<code>oci</code> + <code>org_landing_zone</code> module</td>
-                    <td><code>modules</code>, <code>for_each</code> over tenants, <code>object</code> variables, <code>cidrsubnet</code></td>
+                    <td>Isolated secure landing zone (per tenant / environment)</td>
+                    <td>
+                      One account / subscription / project / compartment per tenant, with its own
+                      VPC/VNet/VCN and core security services
+                    </td>
+                    <td>
+                      <code>aws</code> / <code>azurerm</code> / <code>google</code> / <code>oci</code> +
+                      shared <code>landing_zone</code> module that creates:
+                      org hierarchy (if needed), network, logging, basic IAM
+                    </td>
+                    <td>
+                      <ul class="tf-list">
+                        <li><code>module "landing_zone"</code> called once per tenant/env</li>
+                        <li><code>for_each</code> over tenants/environments</li>
+                        <li><code>object</code> variables for “landing zone config”</li>
+                        <li><code>cidrsubnet</code>/<code>cidrsubnets</code> for address planning</li>
+                      </ul>
+                    </td>
                   </tr>
                   <tr>
-                    <td>Inter-court secure connectivity (L5/L6)</td>
-                    <td>VPN, Direct Connect/ExpressRoute/FastConnect, Private Link, peering</td>
-                    <td>Network connectivity module (per cloud + cross-cloud)</td>
-                    <td><code>resource</code> for VPNs, <code>data</code> sources for existing endpoints, <code>depends_on</code> for ordering</td>
+                    <td>Secure connectivity between environments / networks</td>
+                    <td>
+                      VPNs, private connectivity (Direct Connect / ExpressRoute / FastConnect),
+                      private service endpoints, VPC/VNet peering
+                    </td>
+                    <td>
+                      Per-cloud “connectivity” modules:
+                      <ul class="tf-list">
+                        <li>AWS: TGW/VGW/VPN modules</li>
+                        <li>Azure: vNet gateway + connections</li>
+                        <li>GCP: Cloud VPN / Interconnect modules</li>
+                        <li>OCI: DRG + IPSec modules</li>
+                      </ul>
+                    </td>
+                    <td>
+                      <ul class="tf-list">
+                        <li><code>resource</code> for gateways, routers, links</li>
+                        <li><code>data</code> sources for existing networks</li>
+                        <li><code>depends_on</code> for ordered bring-up</li>
+                        <li><code>for_each</code> over “connection pairs” map</li>
+                      </ul>
+                    </td>
                   </tr>
                   <tr>
-                    <td>Audit & compliance logging (CJIS-like)</td>
-                    <td>Central log accounts/compartments, SIEM integration</td>
-                    <td>“Audit baseline” module enabling trails, diagnostics, sinks</td>
-                    <td><code>locals</code> for log destinations, <code>jsonencode</code> for policies, <code>for_each</code> over regions/projects/compartments</td>
+                    <td>Centralized audit &amp; compliance logging</td>
+                    <td>
+                      Dedicated log accounts/projects/compartments, SIEM or data lake,
+                      long-term storage, immutable archives
+                    </td>
+                    <td>
+                      “Audit baseline” module per cloud that enables:
+                      CloudTrail/Activity Logs, Config/Policy logs, flow logs, app logs
+                      and exports to central storage/analytics
+                    </td>
+                    <td>
+                      <ul class="tf-list">
+                        <li><code>locals</code> for log destinations (buckets, topics, workspaces)</li>
+                        <li><code>jsonencode</code> / <code>yamlencode</code> for policy and routing config</li>
+                        <li><code>for_each</code> over regions/accounts/projects</li>
+                        <li><code>lifecycle.prevent_destroy</code> for log buckets</li>
+                      </ul>
+                    </td>
                   </tr>
                   <tr>
-                    <td>Zero-trust app exposure</td>
-                    <td>WAF, app gateways, private ingress, mTLS where possible</td>
-                    <td>App perimeter module (front door / ALB / API gateway / OCI LB)</td>
-                    <td><code>module</code> composition, <code>object</code> for security policy, <code>validation</code> on protocols</td>
+                    <td>Zero-trust application exposure</td>
+                    <td>
+                      Internet and internal apps fronted by WAF/API gateway/app gateway,
+                      minimal open ports, TLS everywhere, no direct access to workloads
+                    </td>
+                    <td>
+                      “App perimeter” module that wraps:
+                      ALB/ELB + WAF (AWS),
+                      Application Gateway / Front Door (Azure),
+                      External HTTP(S) / Cloud Armor (GCP),
+                      OCI LB/WAF (Oracle)
+                    </td>
+                    <td>
+                      <ul class="tf-list">
+                        <li><code>module "app_perimeter"</code> with <code>object</code>-typed “route rules”</li>
+                        <li><code>validation</code> blocks for allowed protocols/TLS versions</li>
+                        <li><code>dynamic</code> blocks for listener/rule lists</li>
+                        <li><code>for_each</code> over services/endpoints</li>
+                      </ul>
+                    </td>
                   </tr>
                   <tr>
-                    <td>Multi-cloud portability (same app on AWS/Azure/GCP/OCI)</td>
-                    <td>Equivalent runtime services per cloud</td>
-                    <td>Cloud-agnostic <code>app_stack</code> module + internal provider-specific modules</td>
-                    <td><code>providers</code> with <code>alias</code>, <code>try</code>/<code>can</code> for optional fields, <code>conditional</code> blocks by cloud</td>
+                    <td>Multi-cloud portability (same app on multiple clouds)</td>
+                    <td>
+                      Equivalent runtimes (containers, functions, DB, storage, messaging)
+                      wired behind the same logical “app contract”
+                    </td>
+                    <td>
+                      Cloud-agnostic <code>app_stack</code> module that internally calls:
+                      <ul class="tf-list">
+                        <li>AWS: ECS/EKS/Lambda + RDS/Dynamo + S3</li>
+                        <li>Azure: AKS/App Service + SQL/Cosmos + Storage</li>
+                        <li>GCP: GKE/Cloud Run + Cloud SQL/Spanner + GCS</li>
+                        <li>OCI: OKE/Functions + Autonomous DB + Object Storage</li>
+                      </ul>
+                    </td>
+                    <td>
+                      <ul class="tf-list">
+                        <li><code>provider</code> aliases (<code>aws.us</code>, <code>azurerm.primary</code>, etc.)</li>
+                        <li><code>var.cloud</code> or <code>var.target_clouds</code> object</li>
+                        <li><code>try</code> / <code>can</code> to handle cloud-specific attrs</li>
+                        <li>Conditional resources: <code>count = var.cloud == "aws" ? 1 : 0</code></li>
+                      </ul>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Regulated / high-sensitivity data enclave</td>
+                    <td>
+                      Strict network isolation, encryption requirements, limited personas,
+                      dedicated logging and key management
+                    </td>
+                    <td>
+                      <code>regulated_enclave</code> module that composes:
+                      landing zone + private network + databases + storage + KMS/Key Vault/Cloud KMS
+                    </td>
+                    <td>
+                      <ul class="tf-list">
+                        <li><code>object</code> variable <code>enclave_policy</code> describing sensitivity + controls</li>
+                        <li><code>validation</code> that enforces “no public endpoints” etc.</li>
+                        <li><code>jsonencode</code> for encryption/policy docs</li>
+                        <li><code>lifecycle</code> rules to block accidental deletion</li>
+                      </ul>
+                    </td>
                   </tr>
                 </tbody>
               </table>
 
-              <h3>15.2 “Recipe” for Adding a New Pattern</h3>
+              <h3>15.2 Example Walk-Through: “New Production App Space”</h3>
+              <p class="tf-tagline">
+                Example: You’re told “we need a new production space for the Payments API, in AWS and Azure, with
+                logs in a central place”.
+              </p>
+
               <ol class="tf-list">
-                <li>Write the requirement in plain language (“New secure data enclave for evidence storage”).</li>
-                <li>Pick cloud(s) and baseline services (e.g., S3/Blob/Cloud Storage/Object Storage, Key Vault/KMS/Vault, private networking).</li>
-                <li>Define a Terraform <strong>module interface</strong>:
+                <li><strong>Classify the requirement:</strong> this is a mix of:
                   <ul class="tf-list">
-                    <li><code>variable "enclave_name" { type = string }</code></li>
-                    <li><code>variable "sensitivity" { type = string }</code></li>
-                    <li><code>variable "retention_years" { type = number }</code></li>
-                    <li>etc.</li>
+                    <li>“Isolated secure landing zone (per environment)”</li>
+                    <li>“Zero-trust application exposure”</li>
+                    <li>“Centralized audit &amp; compliance logging”</li>
                   </ul>
                 </li>
-                <li>Inside module, implement using provider resources + language options from sections 2–5.</li>
-                <li>Add a line to the decision table above mapping requirement → module name.</li>
+                <li><strong>Pick clouds & services:</strong>
+                  <ul class="tf-list">
+                    <li>AWS + Azure for runtime</li>
+                    <li>Central log account/subscription for logs</li>
+                    <li>App perimeter modules in both clouds</li>
+                  </ul>
+                </li>
+                <li><strong>Pick Terraform modules:</strong>
+                  <ul class="tf-list">
+                    <li><code>module "landing_zone_aws"</code>, <code>module "landing_zone_azure"</code></li>
+                    <li><code>module "app_perimeter_payments"</code></li>
+                    <li><code>module "central_audit_baseline"</code></li>
+                  </ul>
+                </li>
+                <li><strong>Choose language features:</strong>
+                  <ul class="tf-list">
+                    <li><code>for_each</code> over environments (<code>{"prod-us", "prod-eu"}</code>)</li>
+                    <li><code>object</code> variable for <code>payments_app_config</code></li>
+                    <li><code>cidrsubnet</code> for splitting network ranges per env</li>
+                    <li><code>jsonencode</code> to generate IAM/policy docs</li>
+                  </ul>
+                </li>
+                <li><strong>Wire it up:</strong>
+                  <div class="tf-code">
+                    <code>variable "environments" {
+  type    = set(string)
+  default = ["prod-us", "prod-eu"]
+}
+
+variable "payments_app_config" {
+  type = object({
+    name          = string
+    ports         = list(number)
+    public        = bool
+    allowed_cidrs = list(string)
+  })
+}
+
+module "landing_zone_aws" {
+  for_each    = var.environments
+  source      = "../modules/landing-zone-aws"
+  environment = each.key
+}
+
+module "app_perimeter_payments" {
+  source      = "../modules/app-perimeter"
+  cloud       = "aws"
+  environment = "prod-us"
+  app         = var.payments_app_config
+}</code>
+                  </div>
+                </li>
               </ol>
 
               <p class="tf-note">
-                Over time, this section becomes your <em>real</em> CCoE catalogue: every row is a
-                reusable Terraform “recipe” that teams can consume instead of starting from scratch.
+                The idea: every time someone says “we need X environment / pattern”, you don’t start from zero.
+                You land in this section, find the closest row, grab the providers + modules + language options,
+                and you’re 80% there. Over time, you add more rows that match your real-world patterns.
               </p>
             </section>
 
@@ -1853,7 +2018,7 @@ terraform apply plan.bin</code>
                   <div class="tf-link-card-title">Azure Terraform Playbook</div>
                   <p>
                     Hub-spoke VNets, subscriptions, policies, AKS, storage and data services
-                    with patterns for court / tenant networks and secure enclaves on top of
+                    with patterns for isolated networks and secure enclaves on top of
                     <code>azurerm_*</code> and <code>azuread_*</code>.
                   </p>
                   <a href="terraform/terraform-azure.html">Open Azure Terraform Map ⟶</a>
@@ -1880,7 +2045,7 @@ terraform apply plan.bin</code>
 
               <p class="tf-note">
                 You can add more drilldowns later (for example, <em>“Kubernetes Everywhere”</em>,
-                <em>“On-prem & VMware”</em>, or <em>“Court-to-Court Secure Link Patterns”</em>) by
+                <em>“On-prem & VMware”</em>, or any other deep dive) by
                 dropping new HTML files in the <code>/terraform/</code> directory and adding cards here.
               </p>
             </section>
