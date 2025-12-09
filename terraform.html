@@ -545,6 +545,14 @@
               <li><a href="#tf-workflows">9. Plans, Envs, CI/CD</a></li>
               <li><a href="#tf-usecases">10. Quick Use-Case Index</a></li>
             </ul>
+
+            <div class="tf-nav-section-label">Cloud Deep Dives</div>
+            <ul>
+              <li><a href="#tf-aws">11. AWS Terraform Map</a></li>
+              <li><a href="#tf-azure">12. Azure Terraform Map</a></li>
+              <li><a href="#tf-gcp">13. GCP Terraform Map</a></li>
+              <li><a href="#tf-ccoe-maps">14. CCoE Decision Maps</a></li>
+            </ul>
           </nav>
 
           <main class="tf-content">
@@ -827,7 +835,7 @@ provider "aws" {
                   <dl class="tf-kv">
                     <dt><code>backend</code></dt>
                     <dd>Inside <code>terraform {}</code>: configure where state lives (S3, GCS, AzureRM, etc.).</dd>
-                    <dt><code>moved</code></dt>
+                    <dt><code>moved</dt>
                     <dd>Tell Terraform that a resource address changed (rename / refactors without recreation).</dd>
                     <dt><code>import</code> block</dt>
                     <dd>(Modern syntax) declarative import – map existing resources into state files.</dd>
@@ -926,8 +934,8 @@ import {
                     <div class="tf-code">
                       <code>locals {
   app_servers = {
-    api  = "t3.medium"
-    web  = "t3.small"
+    api   = "t3.medium"
+    web   = "t3.small"
     batch = "t3.large"
   }
 }
@@ -1440,6 +1448,342 @@ terraform apply plan.bin</code>
                 Extend this table with your own patterns (e.g., “court-to-court secure link”,
                 “L5/L6 isolated zone”, “CJIS-compliant data enclave”) and tie each to modules,
                 providers, and meta-arguments in this encyclopedia.
+              </p>
+            </section>
+
+            <!-- 11. AWS MAP -->
+            <section id="tf-aws" class="tf-section">
+              <div class="tf-section-header">
+                <h2>11. AWS Terraform Map (by Domain)</h2>
+                <span class="tf-badge">AWS</span>
+              </div>
+              <p class="tf-tagline">
+                Quick map from AWS building blocks to Terraform <code>aws_*</code> resources and the
+                language options you’ll use most with them.
+              </p>
+
+              <table class="tf-table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>AWS Services</th>
+                    <th>Key Terraform Resources</th>
+                    <th>Notes / Options</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Networking</td>
+                    <td>VPC, Subnet, IGW, NAT, TGW, Route53, NACL, SG</td>
+                    <td><code>aws_vpc</code>, <code>aws_subnet</code>, <code>aws_internet_gateway</code>, <code>aws_nat_gateway</code>, <code>aws_route_table</code>, <code>aws_route53_zone</code>, <code>aws_security_group</code></td>
+                    <td>Use <code>for_each</code> for subnets; use <code>cidrsubnet</code> to derive CIDRs; modules for standardized VPC.</td>
+                  </tr>
+                  <tr>
+                    <td>Compute</td>
+                    <td>EC2, ASG, ECS, EKS, Lambda</td>
+                    <td><code>aws_instance</code>, <code>aws_launch_template</code>, <code>aws_autoscaling_group</code>, <code>aws_eks_cluster</code>, <code>aws_lambda_function</code></td>
+                    <td>Pattern: app module wraps EC2/ECS/EKS plus SGs, IAM roles, load balancers.</td>
+                  </tr>
+                  <tr>
+                    <td>Identity</td>
+                    <td>IAM, STS</td>
+                    <td><code>aws_iam_role</code>, <code>aws_iam_policy</code>, <code>aws_iam_role_policy_attachment</code>, <code>aws_iam_user</code>, <code>aws_iam_group</code></td>
+                    <td>Use <code>jsonencode</code> for policy docs; build roles from object variables representing persona.</td>
+                  </tr>
+                  <tr>
+                    <td>Storage</td>
+                    <td>S3, EBS, EFS</td>
+                    <td><code>aws_s3_bucket</code>, <code>aws_ebs_volume</code>, <code>aws_efs_file_system</code>, <code>aws_efs_mount_target</code></td>
+                    <td>Protect critical buckets with <code>lifecycle.prevent_destroy</code>; enforce encryption defaults via module.</td>
+                  </tr>
+                  <tr>
+                    <td>Database</td>
+                    <td>RDS, Aurora, DynamoDB</td>
+                    <td><code>aws_db_instance</code>, <code>aws_rds_cluster</code>, <code>aws_dynamodb_table</code></td>
+                    <td>Use parameter objects for backup, multi-AZ, encryption, network placement.</td>
+                  </tr>
+                  <tr>
+                    <td>Security</td>
+                    <td>KMS, CloudTrail, Config, GuardDuty</td>
+                    <td><code>aws_kms_key</code>, <code>aws_cloudtrail</code>, <code>aws_config_configuration_recorder</code>, <code>aws_guardduty_detector</code></td>
+                    <td>Centralize “security services” into one module per region/account.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <details class="tf-details">
+                <summary>
+                  <div class="tf-summary-text">
+                    <span class="tf-summary-label">AWS Landing Zone Example (High-Level)</span>
+                    <span class="tf-summary-meta">How the pieces combine in Terraform.</span>
+                  </div>
+                </summary>
+                <div class="tf-details-body">
+                  <div class="tf-code">
+                    <code>terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~&gt; 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.region
+}
+
+module "org_landing_zone" {
+  source  = "appcorp/landing-zone/aws"
+  version = "1.0.0"
+
+  root_account_id = var.root_account_id
+  security_account_id = var.security_account_id
+  audit_account_id    = var.audit_account_id
+
+  network_config = var.network_config   # object with VPCs, subnets, TGW, etc.
+}</code>
+                  </div>
+                  <p class="tf-note">
+                    The “options” you use here are mostly module inputs: objects describing
+                    accounts, VPC topologies, security posture. The module implementation
+                    uses <code>aws_*</code> resources, <code>for_each</code>, and HCL functions from earlier sections.
+                  </p>
+                </div>
+              </details>
+            </section>
+
+            <!-- 12. AZURE MAP -->
+            <section id="tf-azure" class="tf-section">
+              <div class="tf-section-header">
+                <h2>12. Azure Terraform Map (by Domain)</h2>
+                <span class="tf-badge">Azure</span>
+              </div>
+              <p class="tf-tagline">
+                Mapping Azure architecture to <code>azurerm_*</code> resources and the Terraform
+                options you’ll combine with them.
+              </p>
+
+              <table class="tf-table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>Azure Services</th>
+                    <th>Key Terraform Resources</th>
+                    <th>Notes / Options</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Networking</td>
+                    <td>Virtual Network, Subnets, NSG, Azure Firewall, Private Link</td>
+                    <td><code>azurerm_virtual_network</code>, <code>azurerm_subnet</code>, <code>azurerm_network_security_group</code>, <code>azurerm_firewall</code>, <code>azurerm_private_endpoint</code></td>
+                    <td>Pattern: VNet module that takes address space + subnet map and builds NSGs, routes, endpoints with <code>for_each</code>.</td>
+                  </tr>
+                  <tr>
+                    <td>Compute</td>
+                    <td>Virtual Machines, VM Scale Sets, AKS</td>
+                    <td><code>azurerm_linux_virtual_machine</code>, <code>azurerm_windows_virtual_machine</code>, <code>azurerm_kubernetes_cluster</code>, <code>azurerm_virtual_machine_scale_set</code></td>
+                    <td>Use object variables for SKU, OS, disks, managed identity; optionally <code>templatefile</code> for cloud-init.</td>
+                  </tr>
+                  <tr>
+                    <td>Identity</td>
+                    <td>Azure AD, Managed Identity, RBAC</td>
+                    <td><code>azuread_user</code>, <code>azuread_group</code>, <code>azurerm_role_assignment</code>, <code>azurerm_user_assigned_identity</code></td>
+                    <td>Central RBAC module uses <code>for_each</code> for role assignments to subscriptions and resource groups.</td>
+                  </tr>
+                  <tr>
+                    <td>Storage</td>
+                    <td>Storage Accounts, Blobs, Files</td>
+                    <td><code>azurerm_storage_account</code>, <code>azurerm_storage_container</code>, <code>azurerm_storage_share</code></td>
+                    <td>Enforce naming + redundancy via validation + default objects; lock down public access by default.</td>
+                  </tr>
+                  <tr>
+                    <td>Database</td>
+                    <td>Azure SQL, PostgreSQL, Cosmos DB</td>
+                    <td><code>azurerm_mssql_server</code>, <code>azurerm_mssql_database</code>, <code>azurerm_postgresql_flexible_server</code>, <code>azurerm_cosmosdb_account</code></td>
+                    <td>Set network rules, AD auth, backup policies via module-level inputs.</td>
+                  </tr>
+                  <tr>
+                    <td>Security & Governance</td>
+                    <td>Key Vault, Policy, Monitor, Log Analytics</td>
+                    <td><code>azurerm_key_vault</code>, <code>azurerm_policy_definition</code>, <code>azurerm_policy_assignment</code>, <code>azurerm_monitor_diagnostic_setting</code></td>
+                    <td>CCoE pattern: one “compliance baseline” module that wires policies and diagnostics across subscriptions.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <details class="tf-details">
+                <summary>
+                  <div class="tf-summary-text">
+                    <span class="tf-summary-label">Azure Hub-Spoke Example</span>
+                    <span class="tf-summary-meta">How Terraform options model the topology.</span>
+                  </div>
+                </summary>
+                <div class="tf-details-body">
+                  <div class="tf-code">
+                    <code>module "hub_vnet" {
+  source = "../modules/azure/hub-vnet"
+
+  name                = "hub-${var.region}"
+  resource_group_name = var.network_rg
+  address_space       = ["10.0.0.0/16"]
+  firewall_enabled    = true
+}
+
+module "spoke_vnets" {
+  source = "../modules/azure/spoke-vnet"
+
+  for_each           = var.spoke_definitions
+  hub_vnet_id        = module.hub_vnet.id
+  name               = each.key
+  address_space      = each.value.cidr
+  allowed_peerings   = each.value.allowed_peerings
+}</code>
+                  </div>
+                  <p class="tf-note">
+                    Here the “options” are <code>for_each</code>, <code>object</code> variables for spokes, and
+                    functions like <code>cidrsubnet</code> inside the modules to carve address spaces per spoke.
+                  </p>
+                </div>
+              </details>
+            </section>
+
+            <!-- 13. GCP MAP -->
+            <section id="tf-gcp" class="tf-section">
+              <div class="tf-section-header">
+                <h2>13. GCP Terraform Map (by Domain)</h2>
+                <span class="tf-badge">GCP</span>
+              </div>
+              <p class="tf-tagline">
+                Mapping GCP primitives to <code>google_*</code> resources and the language tools
+                you’ll compose them with.
+              </p>
+
+              <table class="tf-table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>GCP Services</th>
+                    <th>Key Terraform Resources</th>
+                    <th>Notes / Options</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Networking</td>
+                    <td>VPC, Subnets, Cloud Router, Cloud NAT, DNS</td>
+                    <td><code>google_compute_network</code>, <code>google_compute_subnetwork</code>, <code>google_compute_router</code>, <code>google_compute_router_nat</code>, <code>google_dns_managed_zone</code></td>
+                    <td>Use <code>for_each</code> to generate per-region subnets; module-level inputs define CIDR strategy and routing.</td>
+                  </tr>
+                  <tr>
+                    <td>Compute</td>
+                    <td>GCE, GKE, MIGs</td>
+                    <td><code>google_compute_instance</code>, <code>google_compute_instance_template</code>, <code>google_compute_region_instance_group_manager</code>, <code>google_container_cluster</code></td>
+                    <td>Pattern: app module with MIG or GKE, plus firewall rules and load balancing.</td>
+                  </tr>
+                  <tr>
+                    <td>Identity</td>
+                    <td>IAM Roles, Service Accounts</td>
+                    <td><code>google_service_account</code>, <code>google_project_iam_binding</code>, <code>google_project_iam_member</code></td>
+                    <td>Use <code>for_each</code> on IAM bindings from a map of “team → roles”.</td>
+                  </tr>
+                  <tr>
+                    <td>Storage</td>
+                    <td>Cloud Storage</td>
+                    <td><code>google_storage_bucket</code>, <code>google_storage_bucket_iam_member</code></td>
+                    <td>Define uniform bucket-level IAM and retention policies via module.</td>
+                  </tr>
+                  <tr>
+                    <td>Database & Analytics</td>
+                    <td>Cloud SQL, BigQuery</td>
+                    <td><code>google_sql_database_instance</code>, <code>google_sql_database</code>, <code>google_bigquery_dataset</code>, <code>google_bigquery_table</code></td>
+                    <td>Use objects to capture retention, encryption, region, and authorized networks.</td>
+                  </tr>
+                  <tr>
+                    <td>Security & Logging</td>
+                    <td>KMS, Cloud Logging, Cloud Monitoring</td>
+                    <td><code>google_kms_key_ring</code>, <code>google_kms_crypto_key</code>, <code>google_logging_project_sink</code>, <code>google_monitoring_alert_policy</code></td>
+                    <td>Central module wires sinks to SIEM, exports logs cross-project.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <!-- 14. CCOE DECISION MAPS -->
+            <section id="tf-ccoe-maps" class="tf-section">
+              <div class="tf-section-header">
+                <h2>14. CCoE Decision Maps (From Requirement → Terraform)</h2>
+                <span class="tf-badge">Governance</span>
+              </div>
+              <p class="tf-tagline">
+                This section is the bridge from your court / enterprise requirements into concrete
+                Terraform options: which providers, which modules, which language features.
+              </p>
+
+              <h3>14.1 Decision Table (Abstract Requirement → Terraform Stack)</h3>
+              <table class="tf-table">
+                <thead>
+                  <tr>
+                    <th>Requirement Pattern</th>
+                    <th>Cloud Options</th>
+                    <th>Terraform Providers & Modules</th>
+                    <th>Language Options</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Isolated secure landing zone (per court/tenant)</td>
+                    <td>AWS accounts, Azure subscriptions, GCP projects, dedicated VPC/VNet</td>
+                    <td><code>aws</code>/<code>azurerm</code>/<code>google</code> + <code>org_landing_zone</code> module</td>
+                    <td><code>modules</code>, <code>for_each</code> over tenants, <code>object</code> variables, <code>cidrsubnet</code></td>
+                  </tr>
+                  <tr>
+                    <td>Inter-court secure connectivity (L5/L6)</td>
+                    <td>VPN, Direct Connect/ExpressRoute, Private Link, peering</td>
+                    <td>Network connectivity module (per cloud + cross-cloud)</td>
+                    <td><code>resource</code> for VPNs, <code>data</code> sources for existing endpoints, <code>depends_on</code> for ordering</td>
+                  </tr>
+                  <tr>
+                    <td>Audit & compliance logging (CJIS-like)</td>
+                    <td>Central log accounts, SIEM integration</td>
+                    <td>“Audit baseline” module enabling trails, diagnostics, sinks</td>
+                    <td><code>locals</code> for log destinations, <code>jsonencode</code> for policies, <code>for_each</code> over regions/projects</td>
+                  </tr>
+                  <tr>
+                    <td>Zero-trust app exposure</td>
+                    <td>WAF, app gateways, private ingress, mTLS where possible</td>
+                    <td>App perimeter module (front door / ALB / API gateway per cloud)</td>
+                    <td><code>module</code> composition, <code>object</code> for security policy, <code>validation</code> on protocols</td>
+                  </tr>
+                  <tr>
+                    <td>Multi-cloud portability (same app on AWS/Azure/GCP)</td>
+                    <td>Equivalent runtime services per cloud</td>
+                    <td>Cloud-agnostic <code>app_stack</code> module + internal provider-specific modules</td>
+                    <td><code>providers</code> with <code>alias</code>, <code>try</code>/<code>can</code> for optional fields, <code>conditional</code> blocks by cloud</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3>14.2 “Recipe” for Adding a New Pattern</h3>
+              <ol class="tf-list">
+                <li>Write the requirement in plain language (“New secure data enclave for evidence storage”).</li>
+                <li>Pick cloud(s) and baseline services (e.g., S3/EFS, Key Vault, KMS, private networking).</li>
+                <li>Define a Terraform <strong>module interface</strong>:
+                  <ul class="tf-list">
+                    <li><code>variable "enclave_name" { type = string }</code></li>
+                    <li><code>variable "sensitivity" { type = string }</code></li>
+                    <li><code>variable "retention_years" { type = number }</code></li>
+                    <li>etc.</li>
+                  </ul>
+                </li>
+                <li>Inside module, implement using provider resources + language options from sections 2–5.</li>
+                <li>Add a line to the decision table above mapping requirement → module name.</li>
+              </ol>
+
+              <p class="tf-note">
+                Over time, this section becomes your <em>real</em> CCoE catalogue: every row is a
+                reusable Terraform “recipe” that teams can consume instead of starting from scratch.
               </p>
             </section>
           </main>
