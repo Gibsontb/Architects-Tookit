@@ -474,6 +474,53 @@
       margin-top: 0.4rem;
     }
 
+    /* Link buttons for deep dives */
+    .tf-link-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 0.7rem;
+      margin-top: 0.6rem;
+    }
+
+    .tf-link-card {
+      border-radius: 0.8rem;
+      border: 1px solid rgba(59,130,246,0.5);
+      background: radial-gradient(circle at top left, rgba(37,99,235,0.25), rgba(15,23,42,0.95));
+      padding: 0.65rem 0.75rem;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .tf-link-card-title {
+      font-weight: 600;
+    }
+
+    .tf-link-card a {
+      margin-top: 0.25rem;
+      align-self: flex-start;
+      font-size: 0.78rem;
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      border: 1px solid rgba(191,219,254,0.9);
+      color: #bfdbfe;
+      text-decoration: none;
+      background: #020617;
+      transition:
+        background 0.12s ease,
+        border-color 0.12s ease,
+        color 0.12s ease,
+        transform 0.05s ease;
+    }
+
+    .tf-link-card a:hover {
+      background: #111827;
+      border-color: #60a5fa;
+      color: #eff6ff;
+      transform: translateY(-1px);
+    }
+
     @media (max-width: 900px) {
       .tf-layout {
         flex-direction: column;
@@ -551,7 +598,9 @@
               <li><a href="#tf-aws">11. AWS Terraform Map</a></li>
               <li><a href="#tf-azure">12. Azure Terraform Map</a></li>
               <li><a href="#tf-gcp">13. GCP Terraform Map</a></li>
-              <li><a href="#tf-ccoe-maps">14. CCoE Decision Maps</a></li>
+              <li><a href="#tf-oracle">14. Oracle Cloud Terraform Map</a></li>
+              <li><a href="#tf-ccoe-maps">15. CCoE Decision Maps</a></li>
+              <li><a href="#tf-deep-dives">16. Cloud Playbooks & Drilldowns</a></li>
             </ul>
           </nav>
 
@@ -835,7 +884,7 @@ provider "aws" {
                   <dl class="tf-kv">
                     <dt><code>backend</code></dt>
                     <dd>Inside <code>terraform {}</code>: configure where state lives (S3, GCS, AzureRM, etc.).</dd>
-                    <dt><code>moved</dt>
+                    <dt><code>moved</code></dt>
                     <dd>Tell Terraform that a resource address changed (rename / refactors without recreation).</dd>
                     <dt><code>import</code> block</dt>
                     <dd>(Modern syntax) declarative import – map existing resources into state files.</dd>
@@ -1153,30 +1202,30 @@ resource "aws_security_group_rule" "egress_all" {
               <div class="tf-usecase-grid">
                 <div class="tf-usecase-card">
                   <h3>Compute & Runtime</h3>
-                  <p>AWS EC2, Azure VM, GCP Compute, Kubernetes, vSphere, ECS, EKS, AKS, GKE.</p>
+                  <p>AWS EC2, Azure VM, GCP Compute, Oracle Compute, Kubernetes, vSphere, ECS, EKS, AKS, GKE.</p>
                   <div class="tf-usecase-tags">
-                    <span>aws</span><span>azurerm</span><span>google</span><span>kubernetes</span><span>vsphere</span>
+                    <span>aws</span><span>azurerm</span><span>google</span><span>oci</span><span>kubernetes</span><span>vsphere</span>
                   </div>
                 </div>
                 <div class="tf-usecase-card">
                   <h3>Networking</h3>
-                  <p>VPC/VNet/VPC, load balancers, DNS, CDN, firewalls, WAF.</p>
+                  <p>VPC/VNet/VCN, load balancers, DNS, CDN, firewalls, WAF.</p>
                   <div class="tf-usecase-tags">
-                    <span>aws</span><span>azurerm</span><span>google</span><span>cloudflare</span>
+                    <span>aws</span><span>azurerm</span><span>google</span><span>oci</span><span>cloudflare</span>
                   </div>
                 </div>
                 <div class="tf-usecase-card">
                   <h3>Identity & Secrets</h3>
                   <p>IAM roles/policies, SSO, directory entries, secrets engines.</p>
                   <div class="tf-usecase-tags">
-                    <span>aws</span><span>azuread</span><span>google</span><span>vault</span><span>okta</span>
+                    <span>aws</span><span>azuread</span><span>google</span><span>oci</span><span>vault</span><span>okta</span>
                   </div>
                 </div>
                 <div class="tf-usecase-card">
                   <h3>Storage & Databases</h3>
                   <p>Object storage, block storage, managed DBs, caches.</p>
                   <div class="tf-usecase-tags">
-                    <span>aws</span><span>azurerm</span><span>google</span><span>mongodbatlas</span><span>redis</span>
+                    <span>aws</span><span>azurerm</span><span>google</span><span>oci</span><span>mongodbatlas</span><span>redis</span>
                   </div>
                 </div>
                 <div class="tf-usecase-card">
@@ -1197,7 +1246,7 @@ resource "aws_security_group_rule" "egress_all" {
 
               <p class="tf-note">
                 In your Architect’s Kit, you’ll typically preselect “blessed” providers per domain
-                (e.g., <code>aws</code> + <code>azurerm</code> + <code>google</code> + <code>kubernetes</code>),
+                (e.g., <code>aws</code> + <code>azurerm</code> + <code>google</code> + <code>oci</code> + <code>kubernetes</code>),
                 then build modules on top so teams never interact with raw provider resources directly.
               </p>
             </section>
@@ -1422,8 +1471,8 @@ terraform apply plan.bin</code>
                     <td><code>format</code>, <code>join</code>, <code>lookup</code>, <code>try</code></td>
                   </tr>
                   <tr>
-                    <td>Account / subscription bootstrap</td>
-                    <td><code>module</code> landing zone, IAM resources, <code>for_each</code> across accounts</td>
+                    <td>Account / subscription / compartment bootstrap</td>
+                    <td><code>module</code> landing zone, IAM resources, <code>for_each</code> across accounts/projects/compartments</td>
                     <td><code>zipmap</code>, <code>keys</code>, <code>values</code></td>
                   </tr>
                   <tr>
@@ -1510,47 +1559,6 @@ terraform apply plan.bin</code>
                   </tr>
                 </tbody>
               </table>
-
-              <details class="tf-details">
-                <summary>
-                  <div class="tf-summary-text">
-                    <span class="tf-summary-label">AWS Landing Zone Example (High-Level)</span>
-                    <span class="tf-summary-meta">How the pieces combine in Terraform.</span>
-                  </div>
-                </summary>
-                <div class="tf-details-body">
-                  <div class="tf-code">
-                    <code>terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~&gt; 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.region
-}
-
-module "org_landing_zone" {
-  source  = "appcorp/landing-zone/aws"
-  version = "1.0.0"
-
-  root_account_id = var.root_account_id
-  security_account_id = var.security_account_id
-  audit_account_id    = var.audit_account_id
-
-  network_config = var.network_config   # object with VPCs, subnets, TGW, etc.
-}</code>
-                  </div>
-                  <p class="tf-note">
-                    The “options” you use here are mostly module inputs: objects describing
-                    accounts, VPC topologies, security posture. The module implementation
-                    uses <code>aws_*</code> resources, <code>for_each</code>, and HCL functions from earlier sections.
-                  </p>
-                </div>
-              </details>
             </section>
 
             <!-- 12. AZURE MAP -->
@@ -1612,41 +1620,6 @@ module "org_landing_zone" {
                   </tr>
                 </tbody>
               </table>
-
-              <details class="tf-details">
-                <summary>
-                  <div class="tf-summary-text">
-                    <span class="tf-summary-label">Azure Hub-Spoke Example</span>
-                    <span class="tf-summary-meta">How Terraform options model the topology.</span>
-                  </div>
-                </summary>
-                <div class="tf-details-body">
-                  <div class="tf-code">
-                    <code>module "hub_vnet" {
-  source = "../modules/azure/hub-vnet"
-
-  name                = "hub-${var.region}"
-  resource_group_name = var.network_rg
-  address_space       = ["10.0.0.0/16"]
-  firewall_enabled    = true
-}
-
-module "spoke_vnets" {
-  source = "../modules/azure/spoke-vnet"
-
-  for_each           = var.spoke_definitions
-  hub_vnet_id        = module.hub_vnet.id
-  name               = each.key
-  address_space      = each.value.cidr
-  allowed_peerings   = each.value.allowed_peerings
-}</code>
-                  </div>
-                  <p class="tf-note">
-                    Here the “options” are <code>for_each</code>, <code>object</code> variables for spokes, and
-                    functions like <code>cidrsubnet</code> inside the modules to carve address spaces per spoke.
-                  </p>
-                </div>
-              </details>
             </section>
 
             <!-- 13. GCP MAP -->
@@ -1710,10 +1683,77 @@ module "spoke_vnets" {
               </table>
             </section>
 
-            <!-- 14. CCOE DECISION MAPS -->
+            <!-- 14. ORACLE MAP -->
+            <section id="tf-oracle" class="tf-section">
+              <div class="tf-section-header">
+                <h2>14. Oracle Cloud Terraform Map (by Domain)</h2>
+                <span class="tf-badge">Oracle</span>
+              </div>
+              <p class="tf-tagline">
+                Mapping Oracle Cloud Infrastructure (OCI) concepts to <code>oci_*</code> resources and
+                the Terraform options you pair with them.
+              </p>
+
+              <table class="tf-table">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>OCI Services</th>
+                    <th>Key Terraform Resources</th>
+                    <th>Notes / Options</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Tenancy & Compartments</td>
+                    <td>Tenancy, Compartments</td>
+                    <td><code>oci_identity_compartment</code>, <code>oci_identity_tenancy</code> (data)</td>
+                    <td>Pattern: CCoE defines a standard compartment layout per court/app; use <code>for_each</code> across compartments.</td>
+                  </tr>
+                  <tr>
+                    <td>Networking</td>
+                    <td>VCN, Subnets, DRG, LPG, Route Tables, Security Lists, NSG</td>
+                    <td><code>oci_core_vcn</code>, <code>oci_core_subnet</code>, <code>oci_core_route_table</code>, <code>oci_core_drg</code>, <code>oci_core_security_list</code>, <code>oci_core_network_security_group</code></td>
+                    <td>Use <code>cidrsubnet</code> for address planning; modules wrap VCN + subnets + security constructs as one unit.</td>
+                  </tr>
+                  <tr>
+                    <td>Compute</td>
+                    <td>Compute Instances, Instance Configs, Instance Pools</td>
+                    <td><code>oci_core_instance</code>, <code>oci_core_instance_configuration</code>, <code>oci_core_instance_pool</code></td>
+                    <td>Object variables capture shape, image, boot volume params; <code>for_each</code> to deploy per AZ/AD.</td>
+                  </tr>
+                  <tr>
+                    <td>Identity</td>
+                    <td>Users, Groups, Policies, Dynamic Groups</td>
+                    <td><code>oci_identity_user</code>, <code>oci_identity_group</code>, <code>oci_identity_policy</code>, <code>oci_identity_dynamic_group</code></td>
+                    <td>Policies are strings; build them from <code>templatefile</code> or <code>jsonencode</code>-style helpers in locals.</td>
+                  </tr>
+                  <tr>
+                    <td>Storage</td>
+                    <td>Object Storage, Block Volumes, File Storage</td>
+                    <td><code>oci_objectstorage_bucket</code>, <code>oci_core_volume</code>, <code>oci_file_storage_file_system</code></td>
+                    <td>Use modules for “evidence buckets” / “logs buckets”; enforce encryption and retention by default.</td>
+                  </tr>
+                  <tr>
+                    <td>Database</td>
+                    <td>Autonomous DB, DB Systems</td>
+                    <td><code>oci_database_autonomous_database</code>, <code>oci_database_db_system</code></td>
+                    <td>Object inputs for workload type, license model, backup window, network access controls.</td>
+                  </tr>
+                  <tr>
+                    <td>Security & Observability</td>
+                    <td>Vault, Keys, Logging, Events</td>
+                    <td><code>oci_kms_vault</code>, <code>oci_kms_key</code>, <code>oci_logging_log</code>, <code>oci_logging_log_group</code>, <code>oci_events_rule</code></td>
+                    <td>Central “security baseline” module wires logging to SIEM and enforces KMS usage for all encrypted resources.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <!-- 15. CCOE DECISION MAPS -->
             <section id="tf-ccoe-maps" class="tf-section">
               <div class="tf-section-header">
-                <h2>14. CCoE Decision Maps (From Requirement → Terraform)</h2>
+                <h2>15. CCoE Decision Maps (From Requirement → Terraform)</h2>
                 <span class="tf-badge">Governance</span>
               </div>
               <p class="tf-tagline">
@@ -1721,7 +1761,7 @@ module "spoke_vnets" {
                 Terraform options: which providers, which modules, which language features.
               </p>
 
-              <h3>14.1 Decision Table (Abstract Requirement → Terraform Stack)</h3>
+              <h3>15.1 Decision Table (Abstract Requirement → Terraform Stack)</h3>
               <table class="tf-table">
                 <thead>
                   <tr>
@@ -1734,30 +1774,30 @@ module "spoke_vnets" {
                 <tbody>
                   <tr>
                     <td>Isolated secure landing zone (per court/tenant)</td>
-                    <td>AWS accounts, Azure subscriptions, GCP projects, dedicated VPC/VNet</td>
-                    <td><code>aws</code>/<code>azurerm</code>/<code>google</code> + <code>org_landing_zone</code> module</td>
+                    <td>AWS accounts, Azure subscriptions, GCP projects, OCI compartments, dedicated VPC/VNet/VCN</td>
+                    <td><code>aws</code>/<code>azurerm</code>/<code>google</code>/<code>oci</code> + <code>org_landing_zone</code> module</td>
                     <td><code>modules</code>, <code>for_each</code> over tenants, <code>object</code> variables, <code>cidrsubnet</code></td>
                   </tr>
                   <tr>
                     <td>Inter-court secure connectivity (L5/L6)</td>
-                    <td>VPN, Direct Connect/ExpressRoute, Private Link, peering</td>
+                    <td>VPN, Direct Connect/ExpressRoute/FastConnect, Private Link, peering</td>
                     <td>Network connectivity module (per cloud + cross-cloud)</td>
                     <td><code>resource</code> for VPNs, <code>data</code> sources for existing endpoints, <code>depends_on</code> for ordering</td>
                   </tr>
                   <tr>
                     <td>Audit & compliance logging (CJIS-like)</td>
-                    <td>Central log accounts, SIEM integration</td>
+                    <td>Central log accounts/compartments, SIEM integration</td>
                     <td>“Audit baseline” module enabling trails, diagnostics, sinks</td>
-                    <td><code>locals</code> for log destinations, <code>jsonencode</code> for policies, <code>for_each</code> over regions/projects</td>
+                    <td><code>locals</code> for log destinations, <code>jsonencode</code> for policies, <code>for_each</code> over regions/projects/compartments</td>
                   </tr>
                   <tr>
                     <td>Zero-trust app exposure</td>
                     <td>WAF, app gateways, private ingress, mTLS where possible</td>
-                    <td>App perimeter module (front door / ALB / API gateway per cloud)</td>
+                    <td>App perimeter module (front door / ALB / API gateway / OCI LB)</td>
                     <td><code>module</code> composition, <code>object</code> for security policy, <code>validation</code> on protocols</td>
                   </tr>
                   <tr>
-                    <td>Multi-cloud portability (same app on AWS/Azure/GCP)</td>
+                    <td>Multi-cloud portability (same app on AWS/Azure/GCP/OCI)</td>
                     <td>Equivalent runtime services per cloud</td>
                     <td>Cloud-agnostic <code>app_stack</code> module + internal provider-specific modules</td>
                     <td><code>providers</code> with <code>alias</code>, <code>try</code>/<code>can</code> for optional fields, <code>conditional</code> blocks by cloud</td>
@@ -1765,10 +1805,10 @@ module "spoke_vnets" {
                 </tbody>
               </table>
 
-              <h3>14.2 “Recipe” for Adding a New Pattern</h3>
+              <h3>15.2 “Recipe” for Adding a New Pattern</h3>
               <ol class="tf-list">
                 <li>Write the requirement in plain language (“New secure data enclave for evidence storage”).</li>
-                <li>Pick cloud(s) and baseline services (e.g., S3/EFS, Key Vault, KMS, private networking).</li>
+                <li>Pick cloud(s) and baseline services (e.g., S3/Blob/Cloud Storage/Object Storage, Key Vault/KMS/Vault, private networking).</li>
                 <li>Define a Terraform <strong>module interface</strong>:
                   <ul class="tf-list">
                     <li><code>variable "enclave_name" { type = string }</code></li>
@@ -1784,6 +1824,64 @@ module "spoke_vnets" {
               <p class="tf-note">
                 Over time, this section becomes your <em>real</em> CCoE catalogue: every row is a
                 reusable Terraform “recipe” that teams can consume instead of starting from scratch.
+              </p>
+            </section>
+
+            <!-- 16. DEEP DIVE LINKS -->
+            <section id="tf-deep-dives" class="tf-section">
+              <div class="tf-section-header">
+                <h2>16. Cloud Playbooks & Drilldowns</h2>
+                <span class="tf-badge">More Detail</span>
+              </div>
+              <p class="tf-tagline">
+                When you need full-page, cloud-specific maps (more examples, more tables, more
+                options), jump into these dedicated playbooks. They keep all the fine-grain details
+                there and leave this page as the high-level encyclopedia.
+              </p>
+
+              <div class="tf-link-grid">
+                <div class="tf-link-card">
+                  <div class="tf-link-card-title">AWS Terraform Playbook</div>
+                  <p>
+                    Full breakdown of AWS accounts, landing zones, VPC patterns, ECS/EKS stacks,
+                    guardrails, and CCoE patterns – all mapped to <code>aws_*</code> resources and language options.
+                  </p>
+                  <a href="terraform/terraform-aws.html">Open AWS Terraform Map ⟶</a>
+                </div>
+
+                <div class="tf-link-card">
+                  <div class="tf-link-card-title">Azure Terraform Playbook</div>
+                  <p>
+                    Hub-spoke VNets, subscriptions, policies, AKS, storage and data services
+                    with patterns for court / tenant networks and secure enclaves on top of
+                    <code>azurerm_*</code> and <code>azuread_*</code>.
+                  </p>
+                  <a href="terraform/terraform-azure.html">Open Azure Terraform Map ⟶</a>
+                </div>
+
+                <div class="tf-link-card">
+                  <div class="tf-link-card-title">GCP Terraform Playbook</div>
+                  <p>
+                    Org / folder / project layouts, shared VPCs, GKE, BigQuery and central
+                    logging/monitoring patterns expressed via <code>google_*</code> resources.
+                  </p>
+                  <a href="terraform/terraform-gcp.html">Open GCP Terraform Map ⟶</a>
+                </div>
+
+                <div class="tf-link-card">
+                  <div class="tf-link-card-title">Oracle Cloud Terraform Playbook</div>
+                  <p>
+                    Tenancy and compartment layout, VCN patterns, compute, identity, storage,
+                    database, and security baselines using <code>oci_*</code> resources wired into the same CCoE model.
+                  </p>
+                  <a href="terraform/terraform-oracle.html">Open Oracle Terraform Map ⟶</a>
+                </div>
+              </div>
+
+              <p class="tf-note">
+                You can add more drilldowns later (for example, <em>“Kubernetes Everywhere”</em>,
+                <em>“On-prem & VMware”</em>, or <em>“Court-to-Court Secure Link Patterns”</em>) by
+                dropping new HTML files in the <code>/terraform/</code> directory and adding cards here.
               </p>
             </section>
           </main>
