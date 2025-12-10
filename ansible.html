@@ -1963,21 +1963,21 @@ const SCENARIO_DEFS = {
       }
     },
 
-    gcp: {
+     gcp: {
       label: "Google Cloud Platform",
       scenarios: {
         gce_instance: {
-          label: "Compute Engine – VM instance",
-          description: "Create a GCE instance in a specified project and zone.",
+          label: "Compute – VM instance",
+          description: "Create a GCE instance in a given project and zone.",
           inputs: [
-            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project" },
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
             {
               id: "zone",
               label: "Zone",
               control: "select",
               options: GCP_ZONES.map(z => ({ value: z, label: z })),
               default: "us-central1-a",
-              hint: "GCE zone"
+              hint: "Compute zone"
             },
             { id: "instance_name", label: "Instance name", type: "text", default: "gce-ansible-01", hint: "VM name" },
             { id: "machine_type", label: "Machine type", type: "text", default: "e2-medium", hint: "e2-medium, n2-standard-2, etc." },
@@ -2029,11 +2029,81 @@ const SCENARIO_DEFS = {
             ];
           }
         },
+
+        vpc_network: {
+          label: "Network – VPC + subnet + firewall",
+          description: "Create a custom VPC network, subnet, and basic firewall rules.",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            { id: "network_name", label: "VPC network name", type: "text", default: "court-vpc", hint: "Custom VPC" },
+            { id: "subnet_name", label: "Subnet name", type: "text", default: "court-subnet", hint: "Subnet" },
+            { id: "subnet_cidr", label: "Subnet CIDR", type: "text", default: "10.40.0.0/24", hint: "CIDR block" },
+            { id: "region", label: "Subnet region", type: "text", default: "us-central1", hint: "Region, e.g. us-central1" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create GCP VPC and subnet",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  network_name: vals.network_name,
+                  subnet_name: vals.subnet_name,
+                  subnet_cidr: vals.subnet_cidr,
+                  region: vals.region
+                },
+                tasks: [
+                  {
+                    name: "Create custom VPC network",
+                    "google.cloud.gcp_compute_network": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ network_name }}",
+                      auto_create_subnetworks: false
+                    }
+                  },
+                  {
+                    name: "Create subnet",
+                    "google.cloud.gcp_compute_subnetwork": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ subnet_name }}",
+                      region: "{{ region }}",
+                      network: "{{ network_name }}",
+                      ip_cidr_range: "{{ subnet_cidr }}"
+                    }
+                  },
+                  {
+                    name: "Allow SSH ingress",
+                    "google.cloud.gcp_compute_firewall": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ network_name }}-allow-ssh",
+                      network: "{{ network_name }}",
+                      allowed: [{ IPProtocol: "tcp", ports: ["22"] }],
+                      source_ranges: ["0.0.0.0/0"]
+                    }
+                  },
+                  {
+                    name: "Allow HTTP ingress",
+                    "google.cloud.gcp_compute_firewall": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ network_name }}-allow-http",
+                      network: "{{ network_name }}",
+                      allowed: [{ IPProtocol: "tcp", ports: ["80"] }],
+                      source_ranges: ["0.0.0.0/0"]
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
         gcs_bucket: {
-          label: "Cloud Storage – Bucket",
+          label: "Storage – GCS bucket",
           description: "Create a Google Cloud Storage bucket.",
           inputs: [
-            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project" },
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
             { id: "bucket_name", label: "Bucket name", type: "text", default: "court-archive-gcs", hint: "Globally unique" },
             { id: "location", label: "Location", type: "text", default: "US", hint: "US, EU, regional code, etc." }
           ],
@@ -2063,23 +2133,26 @@ const SCENARIO_DEFS = {
             ];
           }
         },
+
         pubsub_topic: {
-          label: "Pub/Sub – Topic",
-          description: "Create a Pub/Sub topic.",
+          label: "Pub/Sub – Topic & subscription",
+          description: "Create a Pub/Sub topic and a pull subscription.",
           inputs: [
-            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project" },
-            { id: "topic_name", label: "Topic name", type: "text", default: "court-events", hint: "Topic ID" }
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            { id: "topic_name", label: "Topic name", type: "text", default: "court-events", hint: "Topic ID" },
+            { id: "subscription_name", label: "Subscription name", type: "text", default: "court-events-sub", hint: "Subscription ID" }
           ],
           buildPlay: (vals, hosts) => {
             return [
               {
-                name: "Create Pub/Sub topic",
+                name: "Create Pub/Sub topic and subscription",
                 hosts,
                 become: false,
                 gather_facts: false,
                 vars: {
                   gcp_project: vals.project_id,
-                  topic_name: vals.topic_name
+                  topic_name: vals.topic_name,
+                  subscription_name: vals.subscription_name
                 },
                 tasks: [
                   {
@@ -2087,7 +2160,293 @@ const SCENARIO_DEFS = {
                     "google.cloud.gcp_pubsub_topic": {
                       name: "{{ topic_name }}",
                       project: "{{ gcp_project }}"
+                    },
+                    register: "topic"
+                  },
+                  {
+                    name: "Ensure pull subscription exists",
+                    "google.cloud.gcp_pubsub_subscription": {
+                      name: "{{ subscription_name }}",
+                      topic: "{{ topic_name }}",
+                      project: "{{ gcp_project }}"
                     }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        cloud_sql_instance: {
+          label: "Cloud SQL – Instance & DB",
+          description: "Create a Cloud SQL instance and a database (PostgreSQL/MySQL).",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            {
+              id: "db_tier",
+              label: "Tier",
+              type: "text",
+              default: "db-custom-1-3840",
+              hint: "db-custom-*-* or db-f1-micro, etc."
+            },
+            {
+              id: "db_version",
+              label: "Database version",
+              control: "select",
+              options: [
+                { value: "POSTGRES_15", label: "PostgreSQL 15" },
+                { value: "POSTGRES_14", label: "PostgreSQL 14" },
+                { value: "MYSQL_8_0", label: "MySQL 8.0" }
+              ],
+              default: "POSTGRES_15",
+              hint: "Engine & version"
+            },
+            { id: "instance_name", label: "Instance name", type: "text", default: "court-sql-01", hint: "Cloud SQL instance ID" },
+            { id: "db_name", label: "Database name", type: "text", default: "court", hint: "Initial database" },
+            { id: "root_password", label: "Root password", type: "text", default: "ChangeMe123!", hint: "Use secret manager in real life" },
+            { id: "region", label: "Region", type: "text", default: "us-central1", hint: "Region (e.g. us-central1)" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create Cloud SQL instance and database",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  db_tier: vals.db_tier,
+                  db_version: vals.db_version,
+                  sql_instance_name: vals.instance_name,
+                  db_name: vals.db_name,
+                  root_password: vals.root_password,
+                  region: vals.region
+                },
+                tasks: [
+                  {
+                    name: "Create Cloud SQL instance",
+                    "google.cloud.gcp_sql_instance": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ sql_instance_name }}",
+                      region: "{{ region }}",
+                      database_version: "{{ db_version }}",
+                      settings: {
+                        tier: "{{ db_tier }}"
+                      },
+                      root_password: "{{ root_password }}"
+                    }
+                  },
+                  {
+                    name: "Create database",
+                    "google.cloud.gcp_sql_database": {
+                      project: "{{ gcp_project }}",
+                      instance: "{{ sql_instance_name }}",
+                      name: "{{ db_name }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        gke_cluster: {
+          label: "GKE – Kubernetes cluster",
+          description: "Create a basic GKE cluster with a single node pool.",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            { id: "cluster_name", label: "Cluster name", type: "text", default: "court-gke", hint: "Cluster ID" },
+            { id: "location", label: "Location (zone or region)", type: "text", default: "us-central1-a", hint: "e.g. us-central1-a or us-central1" },
+            { id: "node_count", label: "Node count", type: "number", default: 3, hint: "Number of nodes" },
+            { id: "node_machine_type", label: "Node machine type", type: "text", default: "e2-standard-4", hint: "e2-standard-4, n2-standard-4, etc." }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create GKE cluster",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  cluster_name: vals.cluster_name,
+                  location: vals.location,
+                  node_count: Number(vals.node_count),
+                  node_machine_type: vals.node_machine_type
+                },
+                tasks: [
+                  {
+                    name: "Create GKE cluster",
+                    "google.cloud.gcp_container_cluster": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ cluster_name }}",
+                      location: "{{ location }}",
+                      initial_node_count: "{{ node_count }}",
+                      node_config: {
+                        machine_type: "{{ node_machine_type }}"
+                      }
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        service_account: {
+          label: "IAM – Service account + key",
+          description: "Create a service account and a key (JSON) for automation.",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            { id: "sa_name", label: "Service account name (ID)", type: "text", default: "court-automation", hint: "Service account ID" },
+            { id: "sa_display_name", label: "Display name", type: "text", default: "Court Automation SA", hint: "Friendly name" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create GCP service account and key",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  sa_name: vals.sa_name,
+                  sa_display_name: vals.sa_display_name
+                },
+                tasks: [
+                  {
+                    name: "Create service account",
+                    "google.cloud.gcp_iam_service_account": {
+                      project: "{{ gcp_project }}",
+                      name: "projects/{{ gcp_project }}/serviceAccounts/{{ sa_name }}@{{ gcp_project }}.iam.gserviceaccount.com",
+                      account_id: "{{ sa_name }}",
+                      display_name: "{{ sa_display_name }}"
+                    }
+                  },
+                  {
+                    name: "Create service account key",
+                    "google.cloud.gcp_iam_service_account_key": {
+                      project: "{{ gcp_project }}",
+                      service_account: "{{ sa_name }}@{{ gcp_project }}.iam.gserviceaccount.com",
+                      private_key_type: "TYPE_GOOGLE_CREDENTIALS_FILE"
+                    },
+                    register: "sa_key"
+                  },
+                  {
+                    name: "Write key to file (local hint)",
+                    "ansible.builtin.debug": {
+                      msg: "SA key JSON: {{ sa_key.privateKeyData | default('stored by module output') }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        cloud_function: {
+          label: "Cloud Functions – HTTP function",
+          description: "Create a simple HTTP Cloud Function (1st gen style).",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            { id: "location", label: "Location", type: "text", default: "us-central1", hint: "Function region" },
+            { id: "function_name", label: "Function name", type: "text", default: "court-function", hint: "Function ID" },
+            { id: "entry_point", label: "Entry point", type: "text", default: "hello_http", hint: "Handler name" },
+            { id: "runtime", label: "Runtime", type: "text", default: "python310", hint: "e.g. python310, nodejs20" },
+            { id: "source_archive_bucket", label: "Source bucket", type: "text", default: "cf-source-bucket", hint: "GCS bucket containing source" },
+            { id: "source_archive_object", label: "Source object", type: "text", default: "court-function.zip", hint: "Zip object" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create Cloud Function",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  location: vals.location,
+                  function_name: vals.function_name,
+                  entry_point: vals.entry_point,
+                  runtime: vals.runtime,
+                  source_archive_bucket: vals.source_archive_bucket,
+                  source_archive_object: vals.source_archive_object
+                },
+                tasks: [
+                  {
+                    name: "Deploy HTTP Cloud Function",
+                    "google.cloud.gcp_cloudfunctions_function": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ function_name }}",
+                      location: "{{ location }}",
+                      entry_point: "{{ entry_point }}",
+                      runtime: "{{ runtime }}",
+                      https_trigger: {},
+                      source_archive_bucket: "{{ source_archive_bucket }}",
+                      source_archive_object: "{{ source_archive_object }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        cloud_run_service: {
+          label: "Cloud Run – Service",
+          description: "Create a Cloud Run service from a container image.",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project ID" },
+            { id: "service_name", label: "Service name", type: "text", default: "court-api", hint: "Cloud Run service" },
+            { id: "location", label: "Location (region)", type: "text", default: "us-central1", hint: "e.g. us-central1" },
+            { id: "image", label: "Container image", type: "text", default: "gcr.io/my-gcp-project/court-api:latest", hint: "Container image URI" },
+            {
+              id: "allow_unauth",
+              label: "Allow unauthenticated",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "Public HTTP or IAM-only"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Deploy Cloud Run service",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  service_name: vals.service_name,
+                  location: vals.location,
+                  image: vals.image,
+                  allow_unauth: vals.allow_unauth === "true"
+                },
+                tasks: [
+                  {
+                    name: "Create Cloud Run service",
+                    "google.cloud.gcp_run_service": {
+                      project: "{{ gcp_project }}",
+                      name: "{{ service_name }}",
+                      location: "{{ location }}",
+                      template: {
+                        spec: {
+                          containers: [
+                            {
+                              image: "{{ image }}"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    name: "Configure IAM for public access (optional hint)",
+                    "ansible.builtin.debug": {
+                      msg: "To allow unauthenticated access, add IAM binding for allUsers on the service if allow_unauth is true."
+                    },
+                    when: "allow_unauth"
                   }
                 ]
               }
