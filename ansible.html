@@ -496,9 +496,17 @@
           <span class="icon">{}</span> JSON
         </button>
       </div>
+      <div class="format-toggle" id="outputKindToggle">
+        <button type="button" data-output-kind="playbook" class="active">
+          <span class="icon">📘</span> Playbook
+        </button>
+        <button type="button" data-output-kind="vars">
+          <span class="icon">🔧</span> Vars only
+        </button>
+      </div>
       <div class="hint-chip">
         <span class="dot"></span>
-        <span>All templates are data-driven; extend in <code>SCENARIO_DEFS</code>.</span>
+        <span>All templates are data-driven; extend in <code>SCENARIO_DEFS</code>. Use “Vars only” to export just the variables for the first play.</span>
       </div>
     </div>
   </header>
@@ -3969,6 +3977,7 @@ vmware: {
   const generateButton = document.getElementById("generateButton");
   const resetButton = document.getElementById("resetButton");
   const formatToggle = document.getElementById("formatToggle");
+  const outputKindToggle = document.getElementById("outputKindToggle");
   const outputPre = document.getElementById("outputPre");
   const codeMeta = document.getElementById("codeMeta");
   const filenameInput = document.getElementById("filenameInput");
@@ -3980,6 +3989,7 @@ vmware: {
   const statusLine = document.getElementById("statusLine");
 
   let currentFormat = "yaml";
+  let currentOutputKind = "playbook"; // "playbook" or "vars"
 
   function initSelectors() {
     platformSelect.innerHTML = "";
@@ -4102,26 +4112,49 @@ vmware: {
     let playbook;
     try {
       playbook = scenario.buildPlay(vals, hosts);
-    } catch (e) {
-      outputPre.textContent = "# Error building playbook: " + e.message;
-      safeUpdateStatus(false, "Error building playbook. Check console.");
-      console.error("buildPlay error", e);
+    } catch (err) {
+      outputPre.textContent = "# Error building playbook: " + err.message;
+      safeUpdateStatus(false, "Error building playbook: " + err.message);
       return;
     }
 
     let text;
-    if (currentFormat === "json") {
-      text = JSON.stringify(playbook, null, 2);
+
+    if (currentOutputKind === "vars") {
+      // Vars-only mode: try to use vars from the first play, fallback to empty object
+      const firstPlay = Array.isArray(playbook) && playbook.length > 0 ? playbook[0] : {};
+      const varsOnly = firstPlay && firstPlay.vars ? firstPlay.vars : {};
+      if (currentFormat === "json") {
+        text = JSON.stringify(varsOnly, null, 2);
+      } else {
+        text = toYaml(varsOnly, 0);
+      }
     } else {
-      text = toYaml(playbook, 0);
+      // Full playbook mode (default)
+      if (currentFormat === "json") {
+        text = JSON.stringify(playbook, null, 2);
+      } else {
+        text = toYaml(playbook, 0);
+      }
     }
+
     outputPre.textContent = text;
 
-    const filename = filenameInput.value || (currentFormat === "yaml" ? "playbook_generated.yml" : "playbook_generated.json");
-    commandHint.textContent = `ansible-playbook -i inventory.yml ${filename}`;
-    codeMeta.textContent = `${platform.label} · ${scenario.label} · Format: ${currentFormat.toUpperCase()}`;
-    safeUpdateStatus(true, "Playbook generated successfully.");
+    var baseName = currentOutputKind === "vars" ? "vars_generated" : "playbook_generated";
+    var filename = filenameInput.value || (currentFormat === "yaml" ? baseName + ".yml" : baseName + ".json");
+
+    if (currentOutputKind === "vars") {
+      commandHint.textContent = "# Include vars in your playbooks, e.g. vars_files: ['" + filename + "']";
+    } else {
+      commandHint.textContent = "ansible-playbook -i inventory.yml " + filename;
+    }
+
+    var kindLabel = currentOutputKind === "vars" ? "VARS" : "PLAYBOOK";
+    codeMeta.textContent = platform.label + " · " + scenario.label + " · Output: " + kindLabel + " · Format: " + currentFormat.toUpperCase();
+
+    safeUpdateStatus(true, "Generation successful.");
   }
+
 
   function handleDownload() {
     const filename = filenameInput.value || (currentFormat === "yaml" ? "playbook_generated.yml" : "playbook_generated.json");
@@ -4166,6 +4199,19 @@ vmware: {
     generatePlaybook();
   }
 
+  function handleOutputKindToggle(ev) {
+    const btn = ev.target.closest("button[data-output-kind]");
+    if (!btn) return;
+    const kind = btn.getAttribute("data-output-kind");
+    if (!kind || kind === currentOutputKind) return;
+    currentOutputKind = kind;
+    Array.from(outputKindToggle.querySelectorAll("button[data-output-kind]")).forEach(b => {
+      b.classList.toggle("active", b.getAttribute("data-output-kind") === currentOutputKind);
+    });
+    generatePlaybook();
+  }
+
+
   function resetAll() {
     hostsInput.value = "all";
     filenameInput.value = "playbook_generated.yml";
@@ -4189,6 +4235,7 @@ vmware: {
       safeUpdateStatus(true, "Service / blueprint changed; review parameters.");
     });
     formatToggle.addEventListener("click", handleFormatToggle);
+    outputKindToggle.addEventListener("click", handleOutputKindToggle);
     downloadButton.addEventListener("click", handleDownload);
     copyButton.addEventListener("click", handleCopyCode);
     copyCommandButton.addEventListener("click", handleCopyCommand);
