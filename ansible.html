@@ -2464,11 +2464,24 @@ const SCENARIO_DEFS = {
           description: "Create an OCI compute instance in a given compartment and subnet.",
           inputs: [
             { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
-            { id: "availability_domain", label: "Availability Domain", type: "text", default: "AD-1", hint: "AD name (e.g. Uocm:US-ASHBURN-AD-1)" },
+            { id: "availability_domain", label: "Availability Domain", type: "text", default: "Uocm:US-ASHBURN-AD-1", hint: "Full AD name" },
             { id: "subnet_ocid", label: "Subnet OCID", type: "text", default: "ocid1.subnet.oc1..xxxxx", hint: "Target subnet" },
             { id: "display_name", label: "Instance display name", type: "text", default: "oci-ansible-01", hint: "Human-friendly name" },
-            { id: "shape", label: "Shape", type: "text", default: "VM.Standard.E4.Flex", hint: "Compute shape" },
-            { id: "image_ocid", label: "Image OCID", type: "text", default: "ocid1.image.oc1..xxxxx", hint: "OS image" }
+            { id: "shape", label: "Shape", type: "text", default: "VM.Standard.E4.Flex", hint: "e.g. VM.Standard.E4.Flex" },
+            { id: "ocpus", label: "OCPUs", type: "number", default: 1, hint: "vCPU count" },
+            { id: "memory_in_gbs", label: "Memory (GB)", type: "number", default: 16, hint: "RAM in GB" },
+            { id: "image_ocid", label: "Image OCID", type: "text", default: "ocid1.image.oc1..xxxxx", hint: "OS image" },
+            {
+              id: "assign_public_ip",
+              label: "Assign public IP",
+              control: "select",
+              options: [
+                { value: "true", label: "true" },
+                { value: "false", label: "false" }
+              ],
+              default: "true",
+              hint: "true / false"
+            }
           ],
           buildPlay: (vals, hosts) => {
             return [
@@ -2483,7 +2496,10 @@ const SCENARIO_DEFS = {
                   subnet_ocid: vals.subnet_ocid,
                   display_name: vals.display_name,
                   shape: vals.shape,
-                  image_ocid: vals.image_ocid
+                  ocpus: Number(vals.ocpus),
+                  memory_in_gbs: Number(vals.memory_in_gbs),
+                  image_ocid: vals.image_ocid,
+                  assign_public_ip: vals.assign_public_ip === "true"
                 },
                 tasks: [
                   {
@@ -2493,8 +2509,13 @@ const SCENARIO_DEFS = {
                       compartment_id: "{{ compartment_ocid }}",
                       display_name: "{{ display_name }}",
                       shape: "{{ shape }}",
+                      shape_config: {
+                        ocpus: "{{ ocpus }}",
+                        memory_in_gbs: "{{ memory_in_gbs }}"
+                      },
                       create_vnic_details: {
-                        subnet_id: "{{ subnet_ocid }}"
+                        subnet_id: "{{ subnet_ocid }}",
+                        assign_public_ip: "{{ assign_public_ip }}"
                       },
                       source_details: {
                         source_type: "image",
@@ -2507,13 +2528,25 @@ const SCENARIO_DEFS = {
             ];
           }
         },
+
         object_bucket: {
           label: "Object Storage – Bucket",
           description: "Create an OCI Object Storage bucket.",
           inputs: [
             { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
-            { id: "namespace", label: "Object storage namespace", type: "text", default: "mytenancy", hint: "Get from OCI console" },
-            { id: "bucket_name", label: "Bucket name", type: "text", default: "court-archive-oci", hint: "Bucket name" }
+            { id: "namespace", label: "Object storage namespace", type: "text", default: "mytenancy", hint: "From OCI console" },
+            { id: "bucket_name", label: "Bucket name", type: "text", default: "court-archive-oci", hint: "Bucket name" },
+            {
+              id: "storage_tier",
+              label: "Storage tier",
+              control: "select",
+              options: [
+                { value: "Standard", label: "Standard" },
+                { value: "Archive", label: "Archive" }
+              ],
+              default: "Standard",
+              hint: "Tier"
+            }
           ],
           buildPlay: (vals, hosts) => {
             return [
@@ -2525,7 +2558,8 @@ const SCENARIO_DEFS = {
                 vars: {
                   compartment_ocid: vals.compartment_ocid,
                   namespace: vals.namespace,
-                  bucket_name: vals.bucket_name
+                  bucket_name: vals.bucket_name,
+                  storage_tier: vals.storage_tier
                 },
                 tasks: [
                   {
@@ -2533,59 +2567,8 @@ const SCENARIO_DEFS = {
                     "oracle.oci.oci_object_storage_bucket": {
                       compartment_id: "{{ compartment_ocid }}",
                       namespace_name: "{{ namespace }}",
-                      name: "{{ bucket_name }}"
-                    }
-                  }
-                ]
-              }
-            ];
-          }
-        }
-      }
-    },
-
-    vmware: {
-      label: "VMware vSphere",
-      scenarios: {
-        vmware_guest: {
-          label: "VM – Clone from template",
-          description: "Clone and customize a VM from a template using community.vmware.vmware_guest.",
-          inputs: [
-            { id: "vcenter_hostname", label: "vCenter hostname", type: "text", default: "vcenter.example.com", hint: "FQDN or IP" },
-            { id: "datacenter", label: "Datacenter name", type: "text", default: "Datacenter-1", hint: "Existing DC" },
-            { id: "cluster", label: "Cluster name", type: "text", default: "Cluster-1", hint: "Target cluster" },
-            { id: "template", label: "Template name", type: "text", default: "tmpl-linux-gold", hint: "Template to clone" },
-            { id: "vm_name", label: "New VM name", type: "text", default: "vm-linux-01", hint: "Target VM name" },
-            { id: "datastore", label: "Datastore name", type: "text", default: "Datastore-1", hint: "Target datastore" }
-          ],
-          buildPlay: (vals, hosts) => {
-            return [
-              {
-                name: "Provision vSphere VM",
-                hosts,
-                become: false,
-                gather_facts: false,
-                vars: {
-                  vcenter_hostname: vals.vcenter_hostname,
-                  datacenter: vals.datacenter,
-                  cluster: vals.cluster,
-                  template: vals.template,
-                  vm_name: vals.vm_name,
-                  datastore: vals.datastore
-                },
-                tasks: [
-                  {
-                    name: "Clone VM from template",
-                    "community.vmware.vmware_guest": {
-                      hostname: "{{ vcenter_hostname }}",
-                      validate_certs: false,
-                      datacenter: "{{ datacenter }}",
-                      cluster: "{{ cluster }}",
-                      name: "{{ vm_name }}",
-                      template: "{{ template }}",
-                      datastore: "{{ datastore }}",
-                      state: "poweredon",
-                      wait_for_ip_address: true
+                      name: "{{ bucket_name }}",
+                      storage_tier: "{{ storage_tier }}"
                     }
                   }
                 ]
@@ -2593,214 +2576,236 @@ const SCENARIO_DEFS = {
             ];
           }
         },
-        snapshot_vm: {
-          label: "VM – Snapshot",
-          description: "Create a snapshot for a vSphere VM.",
+
+        vcn_baseline: {
+          label: "Network – VCN + subnets + IGW",
+          description: "Create a VCN, public/private subnets, Internet Gateway and route table.",
           inputs: [
-            { id: "vcenter_hostname", label: "vCenter hostname", type: "text", default: "vcenter.example.com", hint: "FQDN or IP" },
-            { id: "datacenter", label: "Datacenter name", type: "text", default: "Datacenter-1", hint: "Existing DC" },
-            { id: "vm_name", label: "VM name", type: "text", default: "vm-linux-01", hint: "VM to snapshot" },
-            { id: "snapshot_name", label: "Snapshot name", type: "text", default: "pre-change", hint: "Snapshot label" },
-            { id: "snapshot_desc", label: "Snapshot description", type: "text", default: "Before change window", hint: "Optional description" }
+            { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
+            { id: "vcn_cidr", label: "VCN CIDR", type: "text", default: "10.50.0.0/16", hint: "VCN CIDR block" },
+            { id: "vcn_display_name", label: "VCN display name", type: "text", default: "court-vcn", hint: "VCN name" },
+            { id: "public_subnet_cidr", label: "Public subnet CIDR", type: "text", default: "10.50.1.0/24", hint: "Public subnet" },
+            { id: "private_subnet_cidr", label: "Private subnet CIDR", type: "text", default: "10.50.2.0/24", hint: "Private subnet" }
           ],
           buildPlay: (vals, hosts) => {
             return [
               {
-                name: "Create vSphere VM snapshot",
+                name: "Create OCI VCN baseline",
                 hosts,
                 become: false,
                 gather_facts: false,
                 vars: {
-                  vcenter_hostname: vals.vcenter_hostname,
-                  datacenter: vals.datacenter,
-                  vm_name: vals.vm_name,
-                  snapshot_name: vals.snapshot_name,
-                  snapshot_desc: vals.snapshot_desc
+                  compartment_ocid: vals.compartment_ocid,
+                  vcn_cidr: vals.vcn_cidr,
+                  vcn_display_name: vals.vcn_display_name,
+                  public_subnet_cidr: vals.public_subnet_cidr,
+                  private_subnet_cidr: vals.private_subnet_cidr
                 },
                 tasks: [
                   {
-                    name: "Create snapshot",
-                    "community.vmware.vmware_guest_snapshot": {
-                      hostname: "{{ vcenter_hostname }}",
-                      validate_certs: false,
-                      datacenter: "{{ datacenter }}",
-                      name: "{{ vm_name }}",
-                      state: "present",
-                      snapshot_name: "{{ snapshot_name }}",
-                      description: "{{ snapshot_desc }}"
-                    }
-                  }
-                ]
-              }
-            ];
-          }
-        }
-      }
-    },
-
-    linux: {
-      label: "Generic Linux hosts",
-      scenarios: {
-        nginx_server: {
-          label: "Web – NGINX server",
-          description: "Install NGINX, enable service, and deploy a simple index page.",
-          inputs: [
-            {
-              id: "http_port",
-              label: "HTTP port",
-              type: "number",
-              default: "80",
-              hint: "e.g. 80, 8080"
-            },
-            {
-              id: "index_message",
-              label: "Index page message",
-              type: "text",
-              default: "Hello from Ansible",
-              hint: "Simple banner text"
-            }
-          ],
-          buildPlay: (vals, hosts) => {
-            return [
-              {
-                name: "Configure NGINX web server",
-                hosts,
-                become: true,
-                vars: {
-                  index_message: vals.index_message
-                },
-                tasks: [
-                  {
-                    name: "Install NGINX",
-                    "ansible.builtin.package": {
-                      name: "nginx",
-                      state: "present"
-                    }
-                  },
-                  {
-                    name: "Ensure NGINX running and enabled",
-                    "ansible.builtin.service": {
-                      name: "nginx",
-                      state: "started",
-                      enabled: true
-                    }
-                  },
-                  {
-                    name: "Deploy index page",
-                    "ansible.builtin.copy": {
-                      dest: "/usr/share/nginx/html/index.html",
-                      mode: "0644",
-                      content: "<html><body><h1>{{ index_message }}</h1></body></html>"
-                    }
-                  }
-                ]
-              }
-            ];
-          }
-        },
-        linux_patch: {
-          label: "Ops – Security updates",
-          description: "Run package updates and reboot if required.",
-          inputs: [
-            {
-              id: "reboot_if_needed",
-              label: "Reboot if kernel updated",
-              control: "select",
-              options: BOOL_OPTIONS,
-              default: "true",
-              hint: "true / false"
-            }
-          ],
-          buildPlay: (vals, hosts) => {
-            return [
-              {
-                name: "Apply Linux security updates",
-                hosts,
-                become: true,
-                vars: {
-                  reboot_if_needed: vals.reboot_if_needed === "true"
-                },
-                tasks: [
-                  {
-                    name: "Update packages to latest",
-                    "ansible.builtin.package": {
-                      name: "*",
-                      state: "latest"
-                    }
-                  },
-                  {
-                    name: "Check if reboot is required (Debian/Ubuntu)",
-                    "ansible.builtin.stat": {
-                      path: "/var/run/reboot-required"
+                    name: "Create VCN",
+                    "oracle.oci.oci_core_vcn": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      cidr_block: "{{ vcn_cidr }}",
+                      display_name: "{{ vcn_display_name }}"
                     },
-                    register: "reboot_required_file",
-                    when: "ansible_os_family == 'Debian'"
+                    register: "vcn"
                   },
                   {
-                    name: "Reboot if needed",
-                    "ansible.builtin.reboot": {},
-                    when: "reboot_if_needed and reboot_required_file.stat.exists | default(false)"
+                    name: "Create Internet Gateway",
+                    "oracle.oci.oci_core_internet_gateway": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      vcn_id: "{{ vcn.data.id }}",
+                      display_name: "{{ vcn_display_name }}-igw",
+                      is_enabled: true
+                    },
+                    register: "igw"
+                  },
+                  {
+                    name: "Create public subnet",
+                    "oracle.oci.oci_core_subnet": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      vcn_id: "{{ vcn.data.id }}",
+                      cidr_block: "{{ public_subnet_cidr }}",
+                      display_name: "{{ vcn_display_name }}-public",
+                      prohibit_public_ip_on_vnic: false
+                    },
+                    register: "public_subnet"
+                  },
+                  {
+                    name: "Create private subnet",
+                    "oracle.oci.oci_core_subnet": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      vcn_id: "{{ vcn.data.id }}",
+                      cidr_block: "{{ private_subnet_cidr }}",
+                      display_name: "{{ vcn_display_name }}-private",
+                      prohibit_public_ip_on_vnic: true
+                    },
+                    register: "private_subnet"
+                  },
+                  {
+                    name: "Create route table for public subnet",
+                    "oracle.oci.oci_core_route_table": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      vcn_id: "{{ vcn.data.id }}",
+                      display_name: "{{ vcn_display_name }}-public-rt",
+                      route_rules: [
+                        {
+                          cidr_block: "0.0.0.0/0",
+                          network_entity_id: "{{ igw.data.id }}"
+                        }
+                      ]
+                    },
+                    register: "public_rt"
+                  },
+                  {
+                    name: "Associate route table with public subnet",
+                    "oracle.oci.oci_core_subnet": {
+                      subnet_id: "{{ public_subnet.data.id }}",
+                      route_table_id: "{{ public_rt.data.id }}"
+                    }
                   }
                 ]
               }
             ];
           }
         },
-        linux_users: {
-          label: "Identity – Users & groups",
-          description: "Manage local users, groups and SSH keys.",
+
+        load_balancer: {
+          label: "Load Balancer – Public HTTP",
+          description: "Create a public load balancer with a simple HTTP listener and backend set.",
           inputs: [
-            { id: "group_name", label: "Group name", type: "text", default: "appusers", hint: "Primary group" },
-            { id: "username", label: "User name", type: "text", default: "deploy", hint: "Login user" },
+            { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
+            { id: "subnet1_ocid", label: "Subnet 1 OCID", type: "text", default: "ocid1.subnet.oc1..subnet1", hint: "Subnet for LB" },
+            { id: "subnet2_ocid", label: "Subnet 2 OCID", type: "text", default: "ocid1.subnet.oc1..subnet2", hint: "Second subnet (HA)" },
+            { id: "lb_display_name", label: "LB display name", type: "text", default: "court-lb", hint: "Load balancer name" },
+            { id: "backend_ip", label: "Backend IP (comma-separated)", type: "text", default: "10.50.1.10,10.50.1.11", hint: "Backend server IPs" },
             {
-              id: "shell",
-              label: "Shell",
+              id: "port",
+              label: "Listener port",
+              type: "number",
+              default: 80,
+              hint: "HTTP port"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create OCI Load Balancer",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  compartment_ocid: vals.compartment_ocid,
+                  subnet1_ocid: vals.subnet1_ocid,
+                  subnet2_ocid: vals.subnet2_ocid,
+                  lb_display_name: vals.lb_display_name,
+                  backend_ip_list: vals.backend_ip.split(",").map(s => s.trim()),
+                  port: Number(vals.port)
+                },
+                tasks: [
+                  {
+                    name: "Create public load balancer",
+                    "oracle.oci.oci_load_balancer_load_balancer": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      display_name: "{{ lb_display_name }}",
+                      shape_name: "flexible",
+                      subnet_ids: [
+                        "{{ subnet1_ocid }}",
+                        "{{ subnet2_ocid }}"
+                      ],
+                      is_private: false
+                    },
+                    register: "lb"
+                  },
+                  {
+                    name: "Create backend set",
+                    "oracle.oci.oci_load_balancer_backendset": {
+                      load_balancer_id: "{{ lb.data.id }}",
+                      name: "backendset1",
+                      policy: "ROUND_ROBIN",
+                      health_checker: {
+                        protocol: "HTTP",
+                        url_path: "/",
+                        port: "{{ port }}"
+                      }
+                    }
+                  },
+                  {
+                    name: "Register backends",
+                    "oracle.oci.oci_load_balancer_backend": {
+                      load_balancer_id: "{{ lb.data.id }}",
+                      backendset_name: "backendset1",
+                      ip_address: "{{ item }}",
+                      port: "{{ port }}"
+                    },
+                    loop: "{{ backend_ip_list }}"
+                  },
+                  {
+                    name: "Create HTTP listener",
+                    "oracle.oci.oci_load_balancer_listener": {
+                      load_balancer_id: "{{ lb.data.id }}",
+                      name: "http-listener",
+                      protocol: "HTTP",
+                      port: "{{ port }}",
+                      default_backendset_name: "backendset1"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        autonomous_database: {
+          label: "Database – Autonomous DB",
+          description: "Create an Autonomous Transaction Processing database.",
+          inputs: [
+            { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
+            { id: "db_name", label: "Database name", type: "text", default: "COURTATP", hint: "DB name" },
+            { id: "display_name", label: "Display name", type: "text", default: "court-atp-db", hint: "Friendly name" },
+            {
+              id: "db_workload",
+              label: "Workload type",
               control: "select",
               options: [
-                { value: "/bin/bash", label: "/bin/bash" },
-                { value: "/bin/zsh", label: "/bin/zsh" },
-                { value: "/bin/sh", label: "/bin/sh" }
+                { value: "OLTP", label: "Autonomous Transaction Processing (OLTP)" },
+                { value: "DW", label: "Autonomous Data Warehouse (DW)" }
               ],
-              default: "/bin/bash",
-              hint: "Default shell"
+              default: "OLTP",
+              hint: "Type"
             },
-            { id: "ssh_pubkey", label: "SSH public key", type: "text", default: "ssh-ed25519 AAAA...", hint: "User key" }
+            { id: "cpu_core_count", label: "CPU cores", type: "number", default: 2, hint: "Number of OCPUs" },
+            { id: "data_storage_size_in_tbs", label: "Storage (TB)", type: "number", default: 1, hint: "Data storage in TB" },
+            { id: "admin_password", label: "ADMIN password", type: "text", default: "ChangeMe123!", hint: "Use a secret in real life" }
           ],
           buildPlay: (vals, hosts) => {
             return [
               {
-                name: "Create Linux users & groups",
+                name: "Create Autonomous Database",
                 hosts,
-                become: true,
+                become: false,
+                gather_facts: false,
                 vars: {
-                  group_name: vals.group_name,
-                  username: vals.username,
-                  user_shell: vals.shell,
-                  ssh_pubkey: vals.ssh_pubkey
+                  compartment_ocid: vals.compartment_ocid,
+                  db_name: vals.db_name,
+                  display_name: vals.display_name,
+                  db_workload: vals.db_workload,
+                  cpu_core_count: Number(vals.cpu_core_count),
+                  data_storage_size_in_tbs: Number(vals.data_storage_size_in_tbs),
+                  admin_password: vals.admin_password
                 },
                 tasks: [
                   {
-                    name: "Ensure group exists",
-                    "ansible.builtin.group": {
-                      name: "{{ group_name }}",
-                      state: "present"
-                    }
-                  },
-                  {
-                    name: "Ensure user exists",
-                    "ansible.builtin.user": {
-                      name: "{{ username }}",
-                      group: "{{ group_name }}",
-                      shell: "{{ user_shell }}",
-                      create_home: true
-                    }
-                  },
-                  {
-                    name: "Install authorized key",
-                    "ansible.posix.authorized_key": {
-                      user: "{{ username }}",
-                      state: "present",
-                      key: "{{ ssh_pubkey }}"
+                    name: "Create ATP/ADW database",
+                    "oracle.oci.oci_database_autonomous_database": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      db_name: "{{ db_name }}",
+                      display_name: "{{ display_name }}",
+                      db_workload: "{{ db_workload }}",
+                      cpu_core_count: "{{ cpu_core_count }}",
+                      data_storage_size_in_tbs: "{{ data_storage_size_in_tbs }}",
+                      admin_password: "{{ admin_password }}"
                     }
                   }
                 ]
@@ -2808,40 +2813,37 @@ const SCENARIO_DEFS = {
             ];
           }
         },
-        linux_cron_backup: {
-          label: "Ops – Cron job (backup script)",
-          description: "Install a cron job to run a backup script on a schedule.",
+
+        oke_cluster: {
+          label: "OKE – Kubernetes cluster",
+          description: "Create an Oracle Kubernetes Engine (OKE) cluster.",
           inputs: [
-            { id: "user", label: "Run as user", type: "text", default: "root", hint: "User for cron" },
-            { id: "job_name", label: "Job name", type: "text", default: "nightly-backup", hint: "Identifier" },
-            { id: "schedule", label: "Cron schedule", type: "text", default: "0 2 * * *", hint: "Standard cron string" },
-            { id: "command", label: "Command", type: "text", default: "/usr/local/bin/backup.sh", hint: "Script or command" }
+            { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Cluster compartment" },
+            { id: "vcn_ocid", label: "VCN OCID", type: "text", default: "ocid1.vcn.oc1..xxxxx", hint: "VCN for the cluster" },
+            { id: "cluster_name", label: "Cluster name", type: "text", default: "court-oke", hint: "OKE cluster name" },
+            { id: "k8s_version", label: "Kubernetes version", type: "text", default: "v1.29.1", hint: "K8s version string" }
           ],
           buildPlay: (vals, hosts) => {
             return [
               {
-                name: "Configure backup cron job",
+                name: "Create OKE cluster",
                 hosts,
-                become: true,
+                become: false,
+                gather_facts: false,
                 vars: {
-                  cron_user: vals.user,
-                  job_name: vals.job_name,
-                  schedule: vals.schedule,
-                  command: vals.command
+                  compartment_ocid: vals.compartment_ocid,
+                  vcn_ocid: vals.vcn_ocid,
+                  cluster_name: vals.cluster_name,
+                  k8s_version: vals.k8s_version
                 },
                 tasks: [
                   {
-                    name: "Install cron job",
-                    "ansible.builtin.cron": {
-                      user: "{{ cron_user }}",
-                      name: "{{ job_name }}",
-                      job: "{{ command }}",
-                      special_time: "absent",
-                      minute: "{{ schedule.split(' ')[0] }}",
-                      hour: "{{ schedule.split(' ')[1] }}",
-                      day: "{{ schedule.split(' ')[2] }}",
-                      month: "{{ schedule.split(' ')[3] }}",
-                      weekday: "{{ schedule.split(' ')[4] }}"
+                    name: "Create OKE control plane",
+                    "oracle.oci.oci_containerengine_cluster": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      name: "{{ cluster_name }}",
+                      kubernetes_version: "{{ k8s_version }}",
+                      vcn_id: "{{ vcn_ocid }}"
                     }
                   }
                 ]
@@ -2849,62 +2851,35 @@ const SCENARIO_DEFS = {
             ];
           }
         },
-        linux_harden_ssh: {
-          label: "Security – Harden SSH",
-          description: "Apply basic SSH hardening to sshd_config.",
+
+        kms_key: {
+          label: "Security – KMS vault key",
+          description: "Create a Vault master encryption key in OCI KMS.",
           inputs: [
-            {
-              id: "allow_password_auth",
-              label: "Allow password auth",
-              control: "select",
-              options: BOOL_OPTIONS,
-              default: "false",
-              hint: "Prefer false for security"
-            }
+            { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Key compartment" },
+            { id: "vault_ocid", label: "Vault OCID", type: "text", default: "ocid1.vault.oc1..xxxxx", hint: "Existing Vault OCID" },
+            { id: "key_display_name", label: "Key display name", type: "text", default: "court-data-key", hint: "Friendly key name" }
           ],
           buildPlay: (vals, hosts) => {
             return [
               {
-                name: "Harden SSH configuration",
+                name: "Create Vault master key",
                 hosts,
-                become: true,
+                become: false,
+                gather_facts: false,
                 vars: {
-                  allow_password_auth: vals.allow_password_auth === "true"
+                  compartment_ocid: vals.compartment_ocid,
+                  vault_ocid: vals.vault_ocid,
+                  key_display_name: vals.key_display_name
                 },
                 tasks: [
                   {
-                    name: "Ensure SSHD config present",
-                    "ansible.builtin.lineinfile": {
-                      path: "/etc/ssh/sshd_config",
-                      regexp: "^PasswordAuthentication",
-                      line: "PasswordAuthentication {{ 'yes' if allow_password_auth else 'no' }}",
-                      backup: true
+                    name: "Create KMS key",
+                    "oracle.oci.oci_kms_key": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      vault_id: "{{ vault_ocid }}",
+                      display_name: "{{ key_display_name }}"
                     }
-                  },
-                  {
-                    name: "Disable root login via SSH",
-                    "ansible.builtin.lineinfile": {
-                      path: "/etc/ssh/sshd_config",
-                      regexp: "^PermitRootLogin",
-                      line: "PermitRootLogin prohibit-password",
-                      backup: true
-                    }
-                  },
-                  {
-                    name: "Restart SSH service",
-                    "ansible.builtin.service": {
-                      name: "ssh",
-                      state: "restarted"
-                    },
-                    when: "ansible_service_mgr != 'systemd' or ansible_os_family != 'RedHat'"
-                  },
-                  {
-                    name: "Restart sshd service",
-                    "ansible.builtin.service": {
-                      name: "sshd",
-                      state: "restarted"
-                    },
-                    when: "ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'"
                   }
                 ]
               }
