@@ -483,7 +483,7 @@
         <span class="pill">Multi-Cloud · Scripts · Playbooks</span>
       </div>
       <p class="app-subtitle">
-        Pick platform → scenario → inputs. The generator builds a ready-to-run Ansible playbook and can emit YAML or JSON.
+        Pick platform → service / blueprint → inputs. The generator builds a ready-to-run Ansible playbook and can emit YAML or JSON.
         Platforms include AWS, Azure, Google Cloud, Oracle, VMware, plus generic Linux/Windows config.
       </p>
     </div>
@@ -493,7 +493,7 @@
           <span class="icon">🧾</span> YAML
         </button>
         <button type="button" data-format="json">
-          <span class="icon">{"{}"}</span> JSON
+          <span class="icon">{}</span> JSON
         </button>
       </div>
       <div class="hint-chip">
@@ -504,11 +504,11 @@
   </header>
 
   <main class="grid">
-    <!-- PLATFORM / SCENARIO PICKER -->
+    <!-- PLATFORM / SERVICE PICKER -->
     <section class="panel">
       <div class="panel-inner">
         <div class="panel-header">
-          <div class="panel-title">Platform &amp; Scenario</div>
+          <div class="panel-title">Platform &amp; Service / Blueprint</div>
           <div class="badge">Step 1</div>
         </div>
 
@@ -533,7 +533,7 @@
 
         <div class="field">
           <div class="field-label-row">
-            <label for="scenarioSelect">Scenario / Blueprint</label>
+            <label for="scenarioSelect">Service / Blueprint</label>
             <span class="hint">What are we trying to do?</span>
           </div>
           <select id="scenarioSelect">
@@ -604,7 +604,7 @@
           </div>
         </div>
 
-        <pre id="outputPre"># Select a platform & scenario, adjust parameters, then click “Generate Playbook”.</pre>
+        <pre id="outputPre"># Select a platform & service / blueprint, adjust parameters, then click “Generate Playbook”.</pre>
 
         <div class="command-bar">
           <div class="command-text" id="commandHint">
@@ -651,15 +651,14 @@
   ];
 
   // -----------------------
-  // Data model: platforms & scenarios
-  // control: "select" => render dropdown with options[]
+  // Data model: platforms & services / blueprints
   // -----------------------
   const SCENARIO_DEFS = {
     aws: {
       label: "Amazon Web Services (AWS)",
       scenarios: {
         ec2_instance: {
-          label: "Provision EC2 instance",
+          label: "EC2 – Provision instance",
           description: "Create or update an EC2 instance with an attached security group.",
           inputs: [
             {
@@ -737,7 +736,7 @@
           }
         },
         s3_bucket: {
-          label: "Create S3 bucket",
+          label: "S3 – Bucket with versioning",
           description: "Create an S3 bucket with versioning and basic encryption.",
           inputs: [
             {
@@ -821,7 +820,7 @@
           }
         },
         rds_instance: {
-          label: "Provision RDS instance",
+          label: "RDS – Database instance",
           description: "Create an RDS instance for a relational database.",
           inputs: [
             {
@@ -896,7 +895,7 @@
           }
         },
         iam_role: {
-          label: "Create IAM role for EC2",
+          label: "IAM – EC2 role & profile",
           description: "Create an IAM role and instance profile for EC2 with a basic policy.",
           inputs: [
             { id: "role_name", label: "Role name", type: "text", default: "ec2-ssm-role", hint: "IAM role name" },
@@ -960,6 +959,165 @@
               }
             ];
           }
+        },
+        vpc_baseline: {
+          label: "VPC – Public & private subnets",
+          description: "Baseline VPC with public/private subnets, IGW and public route table.",
+          inputs: [
+            {
+              id: "aws_region",
+              label: "AWS region",
+              control: "select",
+              options: AWS_REGIONS.map(r => ({ value: r, label: r })),
+              default: "us-east-1",
+              hint: "Region"
+            },
+            { id: "vpc_cidr", label: "VPC CIDR", type: "text", default: "10.0.0.0/16", hint: "CIDR block" },
+            { id: "public_cidr", label: "Public subnet CIDR", type: "text", default: "10.0.1.0/24", hint: "Public subnet" },
+            { id: "private_cidr", label: "Private subnet CIDR", type: "text", default: "10.0.2.0/24", hint: "Private subnet" },
+            { id: "name_prefix", label: "Name prefix", type: "text", default: "court-vpc", hint: "Tag prefix" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create baseline VPC",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  aws_region: vals.aws_region,
+                  vpc_cidr: vals.vpc_cidr,
+                  public_cidr: vals.public_cidr,
+                  private_cidr: vals.private_cidr,
+                  name_prefix: vals.name_prefix
+                },
+                tasks: [
+                  {
+                    name: "Create VPC",
+                    "amazon.aws.ec2_vpc_net": {
+                      name: "{{ name_prefix }}",
+                      cidr_block: "{{ vpc_cidr }}",
+                      region: "{{ aws_region }}",
+                      tags: { Name: "{{ name_prefix }}" }
+                    },
+                    register: "vpc"
+                  },
+                  {
+                    name: "Create Internet Gateway",
+                    "amazon.aws.ec2_vpc_igw": {
+                      vpc_id: "{{ vpc.vpc.id }}",
+                      region: "{{ aws_region }}",
+                      state: "present",
+                      tags: { Name: "{{ name_prefix }}-igw" }
+                    },
+                    register: "igw"
+                  },
+                  {
+                    name: "Create public subnet",
+                    "amazon.aws.ec2_vpc_subnet": {
+                      vpc_id: "{{ vpc.vpc.id }}",
+                      cidr: "{{ public_cidr }}",
+                      az: "{{ aws_region }}a",
+                      map_public: true,
+                      region: "{{ aws_region }}",
+                      tags: { Name: "{{ name_prefix }}-public" }
+                    },
+                    register: "public_subnet"
+                  },
+                  {
+                    name: "Create private subnet",
+                    "amazon.aws.ec2_vpc_subnet": {
+                      vpc_id: "{{ vpc.vpc.id }}",
+                      cidr: "{{ private_cidr }}",
+                      az: "{{ aws_region }}b",
+                      region: "{{ aws_region }}",
+                      tags: { Name: "{{ name_prefix }}-private" }
+                    },
+                    register: "private_subnet"
+                  },
+                  {
+                    name: "Create public route table",
+                    "amazon.aws.ec2_vpc_route_table": {
+                      vpc_id: "{{ vpc.vpc.id }}",
+                      region: "{{ aws_region }}",
+                      tags: { Name: "{{ name_prefix }}-public-rt" },
+                      subnets: ["{{ public_subnet.subnet.id }}"],
+                      routes: [
+                        { dest: "0.0.0.0/0", gateway_id: "{{ igw.gateway_id }}" }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        cloudwatch_cpu_alarm: {
+          label: "CloudWatch – EC2 CPU alarm",
+          description: "Create a CloudWatch CPU Utilization alarm for an EC2 instance.",
+          inputs: [
+            {
+              id: "aws_region",
+              label: "AWS region",
+              control: "select",
+              options: AWS_REGIONS.map(r => ({ value: r, label: r })),
+              default: "us-east-1",
+              hint: "Region alarm lives in"
+            },
+            { id: "instance_id", label: "EC2 instance ID", type: "text", default: "i-0123456789abcdef0", hint: "Target EC2" },
+            { id: "alarm_name", label: "Alarm name", type: "text", default: "CPUHigh", hint: "Displayed in CloudWatch" },
+            {
+              id: "cpu_threshold",
+              label: "CPU threshold (%)",
+              type: "number",
+              default: "80",
+              hint: "e.g. 80"
+            },
+            {
+              id: "evaluation_periods",
+              label: "Evaluation periods",
+              type: "number",
+              default: "3",
+              hint: "Number of periods"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create CloudWatch CPU alarm for EC2",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  aws_region: vals.aws_region,
+                  instance_id: vals.instance_id,
+                  alarm_name: vals.alarm_name,
+                  cpu_threshold: parseFloat(vals.cpu_threshold),
+                  evaluation_periods: parseInt(vals.evaluation_periods, 10)
+                },
+                tasks: [
+                  {
+                    name: "Create or update CloudWatch alarm",
+                    "amazon.aws.cloudwatch_metric_alarm": {
+                      state: "present",
+                      region: "{{ aws_region }}",
+                      name: "{{ alarm_name }}",
+                      metric: "CPUUtilization",
+                      namespace: "AWS/EC2",
+                      statistic: "Average",
+                      comparison: "GreaterThanThreshold",
+                      threshold: "{{ cpu_threshold }}",
+                      period: 300,
+                      evaluation_periods: "{{ evaluation_periods }}",
+                      dimensions: {
+                        InstanceId: "{{ instance_id }}"
+                      }
+                    }
+                  }
+                ]
+              }
+            ];
+          }
         }
       }
     },
@@ -968,8 +1126,8 @@
       label: "Microsoft Azure",
       scenarios: {
         vm_linux: {
-          label: "Provision Azure Linux VM",
-          description: "Create a Linux VM, NIC and basic security group.",
+          label: "VM – Linux server",
+          description: "Create a Linux VM, NIC and basic network resources.",
           inputs: [
             {
               id: "azure_location",
@@ -1062,8 +1220,107 @@
             ];
           }
         },
+        vm_windows: {
+          label: "VM – Windows server",
+          description: "Create a Windows VM in Azure with basic network resources.",
+          inputs: [
+            {
+              id: "azure_location",
+              label: "Azure location",
+              control: "select",
+              options: AZURE_LOCATIONS.map(l => ({ value: l, label: l })),
+              default: "eastus",
+              hint: "Region"
+            },
+            { id: "resource_group", label: "Resource group", type: "text", default: "rg-win-servers", hint: "Existing or to create" },
+            { id: "vm_name", label: "VM name", type: "text", default: "vm-win-01", hint: "Name of the VM" },
+            { id: "vm_size", label: "VM size", type: "text", default: "Standard_B2ms", hint: "e.g. Standard_B2ms" },
+            { id: "admin_username", label: "Admin username", type: "text", default: "azureadmin", hint: "Local admin user" },
+            { id: "admin_password", label: "Admin password", type: "text", default: "CHANGE_ME!", hint: "Use secret in real life" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Provision Azure Windows VM",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  azure_location: vals.azure_location,
+                  resource_group: vals.resource_group,
+                  vm_name: vals.vm_name,
+                  vm_size: vals.vm_size,
+                  admin_username: vals.admin_username,
+                  admin_password: vals.admin_password
+                },
+                tasks: [
+                  {
+                    name: "Ensure resource group exists",
+                    "azure.azcollection.azure_rm_resourcegroup": {
+                      name: "{{ resource_group }}",
+                      location: "{{ azure_location }}"
+                    }
+                  },
+                  {
+                    name: "Ensure virtual network exists",
+                    "azure.azcollection.azure_rm_virtualnetwork": {
+                      resource_group: "{{ resource_group }}",
+                      name: "{{ resource_group }}-vnet",
+                      address_prefixes: ["10.20.0.0/16"]
+                    }
+                  },
+                  {
+                    name: "Ensure subnet exists",
+                    "azure.azcollection.azure_rm_subnet": {
+                      resource_group: "{{ resource_group }}",
+                      name: "{{ resource_group }}-subnet",
+                      address_prefix: "10.20.1.0/24",
+                      virtual_network: "{{ resource_group }}-vnet"
+                    }
+                  },
+                  {
+                    name: "Create public IP",
+                    "azure.azcollection.azure_rm_publicipaddress": {
+                      resource_group: "{{ resource_group }}",
+                      allocation_method: "Static",
+                      name: "{{ vm_name }}-pip"
+                    }
+                  },
+                  {
+                    name: "Create NIC",
+                    "azure.azcollection.azure_rm_networkinterface": {
+                      resource_group: "{{ resource_group }}",
+                      name: "{{ vm_name }}-nic",
+                      virtual_network: "{{ resource_group }}-vnet",
+                      subnet: "{{ resource_group }}-subnet",
+                      public_ip_name: "{{ vm_name }}-pip"
+                    }
+                  },
+                  {
+                    name: "Provision Azure Windows VM",
+                    "azure.azcollection.azure_rm_virtualmachine": {
+                      resource_group: "{{ resource_group }}",
+                      name: "{{ vm_name }}",
+                      vm_size: "{{ vm_size }}",
+                      admin_username: "{{ admin_username }}",
+                      admin_password: "{{ admin_password }}",
+                      os_type: "Windows",
+                      network_interfaces: ["{{ vm_name }}-nic"],
+                      image: {
+                        offer: "WindowsServer",
+                        publisher: "MicrosoftWindowsServer",
+                        sku: "2019-Datacenter",
+                        version: "latest"
+                      }
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
         storage_account: {
-          label: "Create Storage Account & Container",
+          label: "Storage – Account & container",
           description: "Create a storage account and a blob container.",
           inputs: [
             {
@@ -1121,6 +1378,72 @@
               }
             ];
           }
+        },
+        sql_db: {
+          label: "SQL – Server & database",
+          description: "Create an Azure SQL logical server and a single database.",
+          inputs: [
+            {
+              id: "azure_location",
+              label: "Azure location",
+              control: "select",
+              options: AZURE_LOCATIONS.map(l => ({ value: l, label: l })),
+              default: "eastus",
+              hint: "Region"
+            },
+            { id: "resource_group", label: "Resource group", type: "text", default: "rg-sql", hint: "Resource group name" },
+            { id: "sql_server_name", label: "SQL server name", type: "text", default: "court-sql-srv", hint: "Globally unique DNS name" },
+            { id: "admin_username", label: "Admin login", type: "text", default: "sqladmin", hint: "SQL admin login" },
+            { id: "admin_password", label: "Admin password", type: "text", default: "CHANGE_ME!", hint: "Use secret in production" },
+            { id: "db_name", label: "Database name", type: "text", default: "court", hint: "DB name" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create Azure SQL server & DB",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  azure_location: vals.azure_location,
+                  resource_group: vals.resource_group,
+                  sql_server_name: vals.sql_server_name,
+                  admin_username: vals.admin_username,
+                  admin_password: vals.admin_password,
+                  db_name: vals.db_name
+                },
+                tasks: [
+                  {
+                    name: "Ensure resource group exists",
+                    "azure.azcollection.azure_rm_resourcegroup": {
+                      name: "{{ resource_group }}",
+                      location: "{{ azure_location }}"
+                    }
+                  },
+                  {
+                    name: "Create SQL logical server",
+                    "azure.azcollection.azure_rm_sqlserver": {
+                      resource_group: "{{ resource_group }}",
+                      name: "{{ sql_server_name }}",
+                      location: "{{ azure_location }}",
+                      admin_username: "{{ admin_username }}",
+                      admin_password: "{{ admin_password }}"
+                    }
+                  },
+                  {
+                    name: "Create SQL database",
+                    "azure.azcollection.azure_rm_sqldatabase": {
+                      resource_group: "{{ resource_group }}",
+                      server_name: "{{ sql_server_name }}",
+                      name: "{{ db_name }}",
+                      edition: "Standard",
+                      requested_service_objective_name: "S0"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
         }
       }
     },
@@ -1129,7 +1452,7 @@
       label: "Google Cloud Platform",
       scenarios: {
         gce_instance: {
-          label: "Provision GCE VM",
+          label: "Compute Engine – VM instance",
           description: "Create a GCE instance in a specified project and zone.",
           inputs: [
             { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project" },
@@ -1192,7 +1515,7 @@
           }
         },
         gcs_bucket: {
-          label: "Create GCS Bucket",
+          label: "Cloud Storage – Bucket",
           description: "Create a Google Cloud Storage bucket.",
           inputs: [
             { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project" },
@@ -1224,6 +1547,37 @@
               }
             ];
           }
+        },
+        pubsub_topic: {
+          label: "Pub/Sub – Topic",
+          description: "Create a Pub/Sub topic.",
+          inputs: [
+            { id: "project_id", label: "Project ID", type: "text", default: "my-gcp-project", hint: "GCP project" },
+            { id: "topic_name", label: "Topic name", type: "text", default: "court-events", hint: "Topic ID" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create Pub/Sub topic",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  gcp_project: vals.project_id,
+                  topic_name: vals.topic_name
+                },
+                tasks: [
+                  {
+                    name: "Ensure topic exists",
+                    "google.cloud.gcp_pubsub_topic": {
+                      name: "{{ topic_name }}",
+                      project: "{{ gcp_project }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
         }
       }
     },
@@ -1232,7 +1586,7 @@
       label: "Oracle Cloud Infrastructure (OCI)",
       scenarios: {
         compute_instance: {
-          label: "Provision OCI compute instance",
+          label: "Compute – VM instance",
           description: "Create an OCI compute instance in a given compartment and subnet.",
           inputs: [
             { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
@@ -1278,6 +1632,40 @@
               }
             ];
           }
+        },
+        object_bucket: {
+          label: "Object Storage – Bucket",
+          description: "Create an OCI Object Storage bucket.",
+          inputs: [
+            { id: "compartment_ocid", label: "Compartment OCID", type: "text", default: "ocid1.compartment.oc1..xxxxx", hint: "Target compartment" },
+            { id: "namespace", label: "Object storage namespace", type: "text", default: "mytenancy", hint: "Get from OCI console" },
+            { id: "bucket_name", label: "Bucket name", type: "text", default: "court-archive-oci", hint: "Bucket name" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create OCI object storage bucket",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  compartment_ocid: vals.compartment_ocid,
+                  namespace: vals.namespace,
+                  bucket_name: vals.bucket_name
+                },
+                tasks: [
+                  {
+                    name: "Ensure bucket exists",
+                    "oracle.oci.oci_object_storage_bucket": {
+                      compartment_id: "{{ compartment_ocid }}",
+                      namespace_name: "{{ namespace }}",
+                      name: "{{ bucket_name }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
         }
       }
     },
@@ -1286,7 +1674,7 @@
       label: "VMware vSphere",
       scenarios: {
         vmware_guest: {
-          label: "Provision vSphere VM (vmware_guest)",
+          label: "VM – Clone from template",
           description: "Clone and customize a VM from a template using community.vmware.vmware_guest.",
           inputs: [
             { id: "vcenter_hostname", label: "vCenter hostname", type: "text", default: "vcenter.example.com", hint: "FQDN or IP" },
@@ -1330,6 +1718,48 @@
               }
             ];
           }
+        },
+        snapshot_vm: {
+          label: "VM – Snapshot",
+          description: "Create a snapshot for a vSphere VM.",
+          inputs: [
+            { id: "vcenter_hostname", label: "vCenter hostname", type: "text", default: "vcenter.example.com", hint: "FQDN or IP" },
+            { id: "datacenter", label: "Datacenter name", type: "text", default: "Datacenter-1", hint: "Existing DC" },
+            { id: "vm_name", label: "VM name", type: "text", default: "vm-linux-01", hint: "VM to snapshot" },
+            { id: "snapshot_name", label: "Snapshot name", type: "text", default: "pre-change", hint: "Snapshot label" },
+            { id: "snapshot_desc", label: "Snapshot description", type: "text", default: "Before change window", hint: "Optional description" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create vSphere VM snapshot",
+                hosts,
+                become: false,
+                gather_facts: false,
+                vars: {
+                  vcenter_hostname: vals.vcenter_hostname,
+                  datacenter: vals.datacenter,
+                  vm_name: vals.vm_name,
+                  snapshot_name: vals.snapshot_name,
+                  snapshot_desc: vals.snapshot_desc
+                },
+                tasks: [
+                  {
+                    name: "Create snapshot",
+                    "community.vmware.vmware_guest_snapshot": {
+                      hostname: "{{ vcenter_hostname }}",
+                      validate_certs: false,
+                      datacenter: "{{ datacenter }}",
+                      name: "{{ vm_name }}",
+                      state: "present",
+                      snapshot_name: "{{ snapshot_name }}",
+                      description: "{{ snapshot_desc }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
         }
       }
     },
@@ -1338,7 +1768,7 @@
       label: "Generic Linux hosts",
       scenarios: {
         nginx_server: {
-          label: "Configure NGINX web server",
+          label: "Web – NGINX server",
           description: "Install NGINX, enable service, and deploy a simple index page.",
           inputs: [
             {
@@ -1362,6 +1792,9 @@
                 name: "Configure NGINX web server",
                 hosts,
                 become: true,
+                vars: {
+                  index_message: vals.index_message
+                },
                 tasks: [
                   {
                     name: "Install NGINX",
@@ -1383,7 +1816,7 @@
                     "ansible.builtin.copy": {
                       dest: "/usr/share/nginx/html/index.html",
                       mode: "0644",
-                      content: `<html><body><h1>${vals.index_message}</h1></body></html>`
+                      content: "<html><body><h1>{{ index_message }}</h1></body></html>"
                     }
                   }
                 ]
@@ -1392,7 +1825,7 @@
           }
         },
         linux_patch: {
-          label: "Apply Linux security updates",
+          label: "Ops – Security updates",
           description: "Run package updates and reboot if required.",
           inputs: [
             {
@@ -1415,7 +1848,7 @@
                 },
                 tasks: [
                   {
-                    name: "Update package cache",
+                    name: "Update packages to latest",
                     "ansible.builtin.package": {
                       name: "*",
                       state: "latest"
@@ -1440,7 +1873,7 @@
           }
         },
         linux_users: {
-          label: "Create Linux users & groups",
+          label: "Identity – Users & groups",
           description: "Manage local users, groups and SSH keys.",
           inputs: [
             { id: "group_name", label: "Group name", type: "text", default: "appusers", hint: "Primary group" },
@@ -1500,6 +1933,109 @@
               }
             ];
           }
+        },
+        linux_cron_backup: {
+          label: "Ops – Cron job (backup script)",
+          description: "Install a cron job to run a backup script on a schedule.",
+          inputs: [
+            { id: "user", label: "Run as user", type: "text", default: "root", hint: "User for cron" },
+            { id: "job_name", label: "Job name", type: "text", default: "nightly-backup", hint: "Identifier" },
+            { id: "schedule", label: "Cron schedule", type: "text", default: "0 2 * * *", hint: "Standard cron string" },
+            { id: "command", label: "Command", type: "text", default: "/usr/local/bin/backup.sh", hint: "Script or command" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Configure backup cron job",
+                hosts,
+                become: true,
+                vars: {
+                  cron_user: vals.user,
+                  job_name: vals.job_name,
+                  schedule: vals.schedule,
+                  command: vals.command
+                },
+                tasks: [
+                  {
+                    name: "Install cron job",
+                    "ansible.builtin.cron": {
+                      user: "{{ cron_user }}",
+                      name: "{{ job_name }}",
+                      job: "{{ command }}",
+                      special_time: "absent",
+                      minute: "{{ schedule.split(' ')[0] }}",
+                      hour: "{{ schedule.split(' ')[1] }}",
+                      day: "{{ schedule.split(' ')[2] }}",
+                      month: "{{ schedule.split(' ')[3] }}",
+                      weekday: "{{ schedule.split(' ')[4] }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        linux_harden_ssh: {
+          label: "Security – Harden SSH",
+          description: "Apply basic SSH hardening to sshd_config.",
+          inputs: [
+            {
+              id: "allow_password_auth",
+              label: "Allow password auth",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "Prefer false for security"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Harden SSH configuration",
+                hosts,
+                become: true,
+                vars: {
+                  allow_password_auth: vals.allow_password_auth === "true"
+                },
+                tasks: [
+                  {
+                    name: "Ensure SSHD config present",
+                    "ansible.builtin.lineinfile": {
+                      path: "/etc/ssh/sshd_config",
+                      regexp: "^PasswordAuthentication",
+                      line: "PasswordAuthentication {{ 'yes' if allow_password_auth else 'no' }}",
+                      backup: true
+                    }
+                  },
+                  {
+                    name: "Disable root login via SSH",
+                    "ansible.builtin.lineinfile": {
+                      path: "/etc/ssh/sshd_config",
+                      regexp: "^PermitRootLogin",
+                      line: "PermitRootLogin prohibit-password",
+                      backup: true
+                    }
+                  },
+                  {
+                    name: "Restart SSH service",
+                    "ansible.builtin.service": {
+                      name: "ssh",
+                      state: "restarted"
+                    },
+                    when: "ansible_service_mgr != 'systemd' or ansible_os_family != 'RedHat'"
+                  },
+                  {
+                    name: "Restart sshd service",
+                    "ansible.builtin.service": {
+                      name: "sshd",
+                      state: "restarted"
+                    },
+                    when: "ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'"
+                  }
+                ]
+              }
+            ];
+          }
         }
       }
     },
@@ -1508,7 +2044,7 @@
       label: "Generic Windows hosts",
       scenarios: {
         join_domain: {
-          label: "Join Windows server to AD domain",
+          label: "Identity – Join to AD domain",
           description: "Join a Windows host to an Active Directory domain using win_domain_membership.",
           inputs: [
             { id: "domain_name", label: "Domain name", type: "text", default: "corp.example.com", hint: "FQDN" },
@@ -1558,7 +2094,7 @@
           }
         },
         install_iis: {
-          label: "Install IIS web server",
+          label: "Web – IIS server",
           description: "Enable IIS role and deploy a simple default page.",
           inputs: [
             { id: "site_name", label: "Site name", type: "text", default: "Default Web Site", hint: "IIS site" },
@@ -1570,6 +2106,9 @@
                 name: "Install IIS",
                 hosts,
                 gather_facts: false,
+                vars: {
+                  index_message: vals.index_message
+                },
                 tasks: [
                   {
                     name: "Install IIS role",
@@ -1591,7 +2130,96 @@
                     name: "Deploy default page",
                     "ansible.windows.win_copy": {
                       dest: "C:\\inetpub\\wwwroot\\index.html",
-                      content: `<html><body><h1>${vals.index_message}</h1></body></html>`
+                      content: "<html><body><h1>{{ index_message }}</h1></body></html>"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        windows_updates: {
+          label: "Ops – Windows Updates",
+          description: "Apply Windows Updates with optional reboot.",
+          inputs: [
+            {
+              id: "category_names",
+              label: "Update categories (comma-separated)",
+              type: "text",
+              default: "SecurityUpdates,CriticalUpdates",
+              hint: "Use ALL for everything"
+            },
+            {
+              id: "reboot_if_needed",
+              label: "Reboot if required",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "true",
+              hint: "true / false"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Apply Windows Updates",
+                hosts,
+                gather_facts: false,
+                vars: {
+                  categories_raw: vals.category_names,
+                  reboot_if_needed: vals.reboot_if_needed === "true"
+                },
+                tasks: [
+                  {
+                    name: "Install updates",
+                    "ansible.windows.win_updates": {
+                      category_names: "{{ categories_raw.split(',') if categories_raw != 'ALL' else [] }}",
+                      state: "installed"
+                    },
+                    register: "update_result"
+                  },
+                  {
+                    name: "Reboot if required and allowed",
+                    "ansible.windows.win_reboot": {},
+                    when: "reboot_if_needed and update_result.reboot_required"
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        windows_local_user: {
+          label: "Identity – Local user",
+          description: "Create or update a local Windows user.",
+          inputs: [
+            { id: "username", label: "Username", type: "text", default: "svc_ansible", hint: "Local account" },
+            { id: "password", label: "Password", type: "text", default: "CHANGE_ME!", hint: "Use vault/secret in real life" },
+            {
+              id: "group",
+              label: "Primary group",
+              type: "text",
+              default: "Users",
+              hint: "e.g. Administrators, Users"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Manage local Windows user",
+                hosts,
+                gather_facts: false,
+                vars: {
+                  username: vals.username,
+                  password: vals.password,
+                  group: vals.group
+                },
+                tasks: [
+                  {
+                    name: "Ensure user exists",
+                    "ansible.windows.win_user": {
+                      name: "{{ username }}",
+                      password: "{{ password }}",
+                      groups: "{{ group }}",
+                      state: "present"
                     }
                   }
                 ]
@@ -1613,7 +2241,6 @@
       return "null";
     }
     if (typeof value === "string") {
-      // Quote only when needed
       if (/[:{}\[\],&*#?|<>=!%@`\\]/.test(value) || value.trim() !== value || value.includes("\n")) {
         return JSON.stringify(value);
       }
@@ -1727,7 +2354,6 @@
       labelRow.appendChild(hintSpan);
       field.appendChild(labelRow);
 
-      // if control: "select" use dropdown
       if (input.control === "select" && Array.isArray(input.options)) {
         const selectEl = document.createElement("select");
         selectEl.id = input.id;
@@ -1737,7 +2363,7 @@
           opt.textContent = optDef.label;
           selectEl.appendChild(opt);
         });
-        if (input.default) {
+        if (input.default !== undefined) {
           selectEl.value = input.default;
         }
         field.appendChild(selectEl);
@@ -1786,8 +2412,8 @@
     const scenario = platform && platform.scenarios[scenarioId];
 
     if (!scenario) {
-      outputPre.textContent = "# No scenario selected.";
-      safeUpdateStatus(false, "No scenario selected.");
+      outputPre.textContent = "# No service / blueprint selected.";
+      safeUpdateStatus(false, "No service / blueprint selected.");
       return;
     }
 
@@ -1810,7 +2436,7 @@
     }
     outputPre.textContent = text;
 
-    const filename = filenameInput.value || "playbook_generated.yml";
+    const filename = filenameInput.value || (currentFormat === "yaml" ? "playbook_generated.yml" : "playbook_generated.json");
     commandHint.textContent = `ansible-playbook -i inventory.yml ${filename}`;
     codeMeta.textContent = `${platform.label} · ${scenario.label} · Format: ${currentFormat.toUpperCase()}`;
     safeUpdateStatus(true, "Playbook generated successfully.");
@@ -1856,7 +2482,6 @@
     Array.from(formatToggle.querySelectorAll("button[data-format]")).forEach(b => {
       b.classList.toggle("active", b.getAttribute("data-format") === currentFormat);
     });
-    // Regenerate with new format if code exists
     generatePlaybook();
   }
 
@@ -1864,24 +2489,23 @@
     hostsInput.value = "all";
     filenameInput.value = "playbook_generated.yml";
     initSelectors();
-    outputPre.textContent = "# Select a platform & scenario, adjust parameters, then click “Generate Playbook”.";
+    outputPre.textContent = "# Select a platform & service / blueprint, adjust parameters, then click “Generate Playbook”.";
     commandHint.textContent = "ansible-playbook -i inventory.yml playbook_generated.yml";
     codeMeta.textContent = "Waiting for input…";
     safeUpdateStatus(true, "Reset to defaults.");
   }
 
-  // init
   document.addEventListener("DOMContentLoaded", () => {
     initSelectors();
     generateButton.addEventListener("click", generatePlaybook);
     resetButton.addEventListener("click", resetAll);
     platformSelect.addEventListener("change", () => {
       loadScenariosForPlatform(platformSelect.value);
-      safeUpdateStatus(true, "Platform changed; scenario & parameters updated.");
+      safeUpdateStatus(true, "Platform changed; service / blueprint & parameters updated.");
     });
     scenarioSelect.addEventListener("change", () => {
       renderParams(platformSelect.value, scenarioSelect.value);
-      safeUpdateStatus(true, "Scenario changed; review parameters.");
+      safeUpdateStatus(true, "Service / blueprint changed; review parameters.");
     });
     formatToggle.addEventListener("click", handleFormatToggle);
     downloadButton.addEventListener("click", handleDownload);
