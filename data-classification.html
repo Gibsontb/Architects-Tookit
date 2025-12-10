@@ -238,6 +238,7 @@
     .form-group-inline {
       display: flex;
       gap: 0.5rem;
+      align-items: flex-end;
     }
 
     label {
@@ -470,6 +471,28 @@
       text-align: right;
     }
 
+    .btn-ghost {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.98);
+      color: #e5e7eb;
+      font-size: 0.76rem;
+      padding: 0.25rem 0.6rem;
+      cursor: pointer;
+      margin-left: 0.3rem;
+      white-space: nowrap;
+      transition:
+        background 0.12s ease,
+        border-color 0.12s ease,
+        transform 0.06s ease;
+    }
+
+    .btn-ghost:hover {
+      background: #111827;
+      border-color: #2563eb;
+      transform: translateY(-1px);
+    }
+
     @media (max-width: 1200px) {
       .layout {
         grid-template-columns: minmax(260px, 280px) minmax(320px, 1fr);
@@ -513,6 +536,15 @@
       .panel {
         min-height: auto;
       }
+
+      .form-group-inline {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .export-actions {
+        justify-content: flex-start !important;
+      }
     }
   </style>
 </head>
@@ -534,12 +566,12 @@
             <p class="tagline">
               Drive your Single Source of Truth from classifications: define sensitivity bands,
               pick data domains, cloud / residency, storage patterns, identity &amp; security baselines —
-              then export a blueprint (narrative or JSON) you can wire into AWS, Azure, GCP, on-prem, or any mix.
+              then export a blueprint (narrative, JSON, or YAML) you can wire into AWS, Azure, GCP, on-prem, or any mix.
             </p>
             <div class="meta">
               <span><span class="meta-dot"></span> Start from classification → derive cloud choices, SSOT stores, and controls</span>
               <span><span class="meta-dot"></span> Covers data, docs, media, daily work, collaboration, logs, and code</span>
-              <span><span class="meta-dot"></span> Export JSON to feed code generators for each cloud</span>
+              <span><span class="meta-dot"></span> JSON/YAML export feeds Terraform / Ansible / CI generators</span>
             </div>
           </div>
           <button
@@ -676,7 +708,7 @@
             </h2>
             <p class="panel-subtitle">
               This blueprint text is built from the context and every classification. Switch the export mode
-              between a narrative blueprint and raw JSON state for generators.
+              between a narrative blueprint, raw JSON state, or YAML state for your generators.
             </p>
 
             <div class="form-group form-group-inline">
@@ -687,7 +719,12 @@
                 <select id="exportMode">
                   <option value="narrative">Narrative blueprint (human-readable)</option>
                   <option value="json">JSON state (for generators / IaC)</option>
+                  <option value="yaml">YAML state (for generators / IaC)</option>
                 </select>
+              </div>
+              <div class="export-actions" style="flex: 0 0 40%; display:flex; justify-content:flex-end;">
+                <button type="button" class="btn-ghost" id="copyExportBtn">Copy export</button>
+                <button type="button" class="btn-ghost" id="downloadExportBtn">Download</button>
               </div>
             </div>
 
@@ -730,6 +767,8 @@
     const configSubtitle = document.getElementById("configSubtitle");
     const blueprintOutput = document.getElementById("blueprintOutput");
     const exportModeSelect = document.getElementById("exportMode");
+    const copyExportBtn = document.getElementById("copyExportBtn");
+    const downloadExportBtn = document.getElementById("downloadExportBtn");
 
     function updateContext() {
       state.context.orgName = orgNameInput.value.trim();
@@ -1315,19 +1354,95 @@
       }
     }
 
+    function toYaml(value, indentLevel = 0) {
+      const indent = "  ".repeat(indentLevel);
+      const nextIndent = "  ".repeat(indentLevel + 1);
+
+      function scalar(v) {
+        if (v === null || v === undefined) return "null";
+        if (typeof v === "number" || typeof v === "boolean") return String(v);
+        // stringify string safely
+        return JSON.stringify(String(v));
+      }
+
+      if (Array.isArray(value)) {
+        if (value.length === 0) return "[]";
+        let out = "";
+        value.forEach(item => {
+          if (item && typeof item === "object") {
+            out += `${indent}-\n${toYaml(item, indentLevel + 1)}`;
+          } else {
+            out += `${indent}- ${scalar(item)}\n`;
+          }
+        });
+        return out;
+      }
+
+      if (value && typeof value === "object") {
+        const keys = Object.keys(value);
+        if (keys.length === 0) return "{}\n";
+        let out = "";
+        keys.forEach(key => {
+          const v = value[key];
+          if (v && typeof v === "object") {
+            const isEmptyObj = !Array.isArray(v) && Object.keys(v).length === 0;
+            const isEmptyArr = Array.isArray(v) && v.length === 0;
+            if (isEmptyObj) {
+              out += `${indent}${key}: {}\n`;
+            } else if (isEmptyArr) {
+              out += `${indent}${key}: []\n`;
+            } else {
+              out += `${indent}${key}:\n${toYaml(v, indentLevel + 1)}`;
+            }
+          } else {
+            out += `${indent}${key}: ${scalar(v)}\n`;
+          }
+        });
+        return out;
+      }
+
+      return `${indent}${scalar(value)}\n`;
+    }
+
+    function getExportPayload() {
+      return {
+        context: { ...state.context },
+        classifications: state.classifications.map(c => ensureConfigDefaults({ ...c }))
+      };
+    }
+
+    function getExportFilename() {
+      const baseRaw = state.context.orgName || "ssot-classifications";
+      const base = baseRaw
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "ssot-classifications";
+
+      const ext =
+        currentExportMode === "json"
+          ? ".json"
+          : currentExportMode === "yaml"
+            ? ".yaml"
+            : ".txt";
+
+      return base + ext;
+    }
+
     function renderBlueprint() {
       const ctx = state.context;
       const name = ctx.orgName || "Single Source of Truth (SSOT)";
       const domainLabel = mapDomainType(ctx.domainType);
       const cloudLabel = mapCloudProvider(ctx.cloudProvider);
 
-      // JSON export for generators
       if (currentExportMode === "json") {
-        const jsonPayload = {
-          context: { ...state.context },
-          classifications: state.classifications.map(c => ensureConfigDefaults({ ...c }))
-        };
+        const jsonPayload = getExportPayload();
         blueprintOutput.value = JSON.stringify(jsonPayload, null, 2);
+        return;
+      }
+
+      if (currentExportMode === "yaml") {
+        const jsonPayload = getExportPayload();
+        blueprintOutput.value = toYaml(jsonPayload);
         return;
       }
 
@@ -1559,6 +1674,31 @@
       renderClassificationConfig();
       renderBlueprint();
     }
+
+    copyExportBtn.addEventListener("click", () => {
+      const text = blueprintOutput.value || "";
+      if (!navigator.clipboard) {
+        alert("Clipboard API not available in this browser.");
+        return;
+      }
+      navigator.clipboard.writeText(text).catch(() => {
+        alert("Could not copy to clipboard.");
+      });
+    });
+
+    downloadExportBtn.addEventListener("click", () => {
+      const text = blueprintOutput.value || "";
+      const filename = getExportFilename();
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
 
     initDefaults();
   </script>
