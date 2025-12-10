@@ -3301,6 +3301,229 @@ vmware: {
           ])
         },
 
+        vsphere_vm_add_disk: {
+          label: "Add extra virtual disk",
+          description: "Attach an additional virtual disk to an existing VM on a given datastore.",
+          inputs: [
+            {
+              id: "vcenter_hostname",
+              label: "vCenter hostname or IP",
+              type: "text",
+              default: "vcenter.example.com",
+              hint: "API endpoint used by Ansible"
+            },
+            {
+              id: "vcenter_username",
+              label: "vCenter username",
+              type: "text",
+              default: "automation@vsphere.local",
+              hint: "Account with rights to modify VMs"
+            },
+            {
+              id: "vcenter_password",
+              label: "vCenter password",
+              type: "text",
+              default: "CHANGE_ME",
+              hint: "Use Ansible Vault / cred store in reality"
+            },
+            {
+              id: "validate_certs",
+              label: "Validate TLS certs",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "false for lab / self-signed; true for hardened prod"
+            },
+            {
+              id: "datacenter_name",
+              label: "Datacenter name",
+              type: "text",
+              default: "Court-DC1",
+              hint: "Datacenter containing the VM"
+            },
+            {
+              id: "vm_name",
+              label: "VM name",
+              type: "text",
+              default: "court-db-01",
+              hint: "Target VM to attach extra disk"
+            },
+            {
+              id: "datastore_name",
+              label: "Datastore",
+              type: "text",
+              default: "vsanDatastore",
+              hint: "Datastore that will hold the new disk"
+            },
+            {
+              id: "new_disk_size_gb",
+              label: "New disk size (GB)",
+              type: "number",
+              default: "100",
+              hint: "Size of the additional data disk"
+            },
+            {
+              id: "unit_number",
+              label: "Disk unit number (optional)",
+              type: "number",
+              default: "",
+              hint: "Leave blank to let vSphere choose next unit"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Add extra virtual disk to VM",
+                hosts,
+                gather_facts: false,
+                vars: {
+                  vcenter_hostname: vals.vcenter_hostname,
+                  vcenter_username: vals.vcenter_username,
+                  vcenter_password: vals.vcenter_password,
+                  validate_certs: vals.validate_certs === "true",
+                  datacenter_name: vals.datacenter_name,
+                  vm_name: vals.vm_name,
+                  datastore_name: vals.datastore_name,
+                  new_disk_size_gb: Number(vals.new_disk_size_gb),
+                  unit_number: vals.unit_number
+                },
+                tasks: [
+                  {
+                    name: "Attach new disk",
+                    "community.vmware.vmware_guest_disk": {
+                      hostname: "{{ vcenter_hostname }}",
+                      username: "{{ vcenter_username }}",
+                      password: "{{ vcenter_password }}",
+                      validate_certs: "{{ validate_certs }}",
+                      datacenter: "{{ datacenter_name }}",
+                      name: "{{ vm_name }}",
+                      disk: [
+                        {
+                          state: "present",
+                          size_gb: "{{ new_disk_size_gb }}",
+                          datastore: "{{ datastore_name }}",
+                          type: "thin",
+                          unit_number: "{{ unit_number | default(omit) }}"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
+        vsphere_vm_folder_and_annotation: {
+          label: "Organize VM into folder + annotation",
+          description: "Move an existing VM into a folder and set an annotation for tagging / audit.",
+          inputs: [
+            {
+              id: "vcenter_hostname",
+              label: "vCenter hostname or IP",
+              type: "text",
+              default: "vcenter.example.com",
+              hint: "API endpoint used by Ansible"
+            },
+            {
+              id: "vcenter_username",
+              label: "vCenter username",
+              type: "text",
+              default: "automation@vsphere.local",
+              hint: "Account with permission to move VMs"
+            },
+            {
+              id: "vcenter_password",
+              label: "vCenter password",
+              type: "text",
+              default: "CHANGE_ME",
+              hint: "Use Ansible Vault / cred store in reality"
+            },
+            {
+              id: "validate_certs",
+              label: "Validate TLS certs",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "false for lab / self-signed; true for hardened prod"
+            },
+            {
+              id: "datacenter_name",
+              label: "Datacenter name",
+              type: "text",
+              default: "Court-DC1",
+              hint: "Datacenter containing the VM"
+            },
+            {
+              id: "vm_name",
+              label: "VM name",
+              type: "text",
+              default: "court-app-01",
+              hint: "VM to move and annotate"
+            },
+            {
+              id: "folder_path",
+              label: "Destination folder path",
+              type: "text",
+              default: "/Court/Prod/IL5",
+              hint: "Full folder path, e.g. /Court/Prod/IL5"
+            },
+            {
+              id: "annotation",
+              label: "VM annotation",
+              type: "text",
+              default: "System of record: CourtCaseMgmt; Data class: CJIS",
+              hint: "Free text used for tagging / classification"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Move VM to folder and set annotation",
+                hosts,
+                gather_facts: false,
+                vars: {
+                  vcenter_hostname: vals.vcenter_hostname,
+                  vcenter_username: vals.vcenter_username,
+                  vcenter_password: vals.vcenter_password,
+                  validate_certs: vals.validate_certs === "true",
+                  datacenter_name: vals.datacenter_name,
+                  vm_name: vals.vm_name,
+                  folder_path: vals.folder_path,
+                  annotation: vals.annotation
+                },
+                tasks: [
+                  {
+                    name: "Move VM to destination folder",
+                    "community.vmware.vmware_guest_move": {
+                      hostname: "{{ vcenter_hostname }}",
+                      username: "{{ vcenter_username }}",
+                      password: "{{ vcenter_password }}",
+                      validate_certs: "{{ validate_certs }}",
+                      datacenter: "{{ datacenter_name }}",
+                      name: "{{ vm_name }}",
+                      folder: "{{ folder_path }}"
+                    }
+                  },
+                  {
+                    name: "Set VM annotation",
+                    "community.vmware.vmware_guest": {
+                      hostname: "{{ vcenter_hostname }}",
+                      username: "{{ vcenter_username }}",
+                      password: "{{ vcenter_password }}",
+                      validate_certs: "{{ validate_certs }}",
+                      datacenter: "{{ datacenter_name }}",
+                      name: "{{ vm_name }}",
+                      annotation: "{{ annotation }}",
+                      state: "present"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+
         vsphere_vm_reconfigure: {
           label: "VM reconfigure (CPU/RAM/disk/network)",
           description: "Adjust hardware and network settings for an existing VM.",
