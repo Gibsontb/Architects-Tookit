@@ -625,30 +625,94 @@
 </div>
 
 <script>
-  // -----------------------
+   // -----------------------
   // Helper option lists for dropdowns
   // -----------------------
+
+  // AWS commercial + GovCloud (DoD IL5+)
+  // GovCloud region names are us-gov-east-1 and us-gov-west-1. :contentReference[oaicite:0]{index=0}
   const AWS_REGIONS = [
-    "us-east-1", "us-east-2", "us-west-1", "us-west-2",
-    "eu-central-1", "eu-west-1", "eu-west-2",
-    "ap-southeast-1", "ap-southeast-2", "ap-northeast-1"
+    // Core commercial US
+    "us-east-1",      // N. Virginia
+    "us-east-2",      // Ohio
+    "us-west-1",      // N. California
+    "us-west-2",      // Oregon,
+
+    // Popular non-US (kept from original)
+    "eu-central-1",   // Frankfurt
+    "eu-west-1",      // Ireland
+    "eu-west-2",      // London
+    "ap-southeast-1", // Singapore
+    "ap-southeast-2", // Sydney
+    "ap-northeast-1", // Tokyo
+
+    // AWS GovCloud (US) — DoD IL5-capable sovereign regions
+    // (separate partitions, ARNs use aws-us-gov). :contentReference[oaicite:1]{index=1}
+    "us-gov-east-1",  // AWS GovCloud (US-East)
+    "us-gov-west-1"   // AWS GovCloud (US-West)
   ];
 
+  // Azure commercial + US Government + DoD + Secret (IL5 / IL6)
+  // IL5 PAs cover US Gov Arizona, Texas, Virginia and US DoD Central/East. :contentReference[oaicite:2]{index=2}
+  // Secret / IL6 regions are exposed as US Sec East / West / West Central. :contentReference[oaicite:3]{index=3}
   const AZURE_LOCATIONS = [
-    "eastus", "eastus2", "westus", "westeurope",
-    "northeurope", "uksouth", "centralus"
+    // Core commercial
+    "eastus",
+    "eastus2",
+    "westus",
+    "westeurope",
+    "northeurope",
+    "uksouth",
+    "centralus",
+
+    // Azure US Government (FedRAMP High, DoD IL4/IL5)
+    "usgovvirginia",
+    "usgovtexas",
+    "usgovarizona",
+
+    // Azure Government DoD (IL5)
+    "usdodcentral",
+    "usdodeast",
+
+    // Azure Government Secret / National Security (IL6-focused)
+    // Note: exposed region codes; service availability varies by product.
+    "usseceast",
+    "ussecwest",
+    "ussecwestcentral"
   ];
 
+  // GCP zones (commercial + IL5 via Assured Workloads US-only boundary)
+  // IL5 in GCP is implemented via an Assured Workloads IL5 control package
+  // that constrains you to US regions, not separate "gov" region names. :contentReference[oaicite:4]{index=4}
   const GCP_ZONES = [
-    "us-central1-a", "us-central1-b",
-    "us-east1-b", "us-east1-c",
-    "europe-west1-b", "europe-west1-c"
+    // US core
+    "us-central1-a",
+    "us-central1-b",
+    "us-central1-c",
+    "us-central1-f",
+
+    "us-east1-b",
+    "us-east1-c",
+    "us-east1-d",
+
+    "us-west1-a",
+    "us-west1-b",
+    "us-west1-c",
+
+    "us-west2-a",
+    "us-west2-b",
+    "us-west2-c",
+
+    // A couple of non-US kept for parity with original sample
+    "europe-west1-b",
+    "europe-west1-c"
   ];
 
   const BOOL_OPTIONS = [
     { value: "true", label: "true" },
     { value: "false", label: "false" }
   ];
+
 
   // -----------------------
   // Data model: platforms & services / blueprints
