@@ -653,8 +653,8 @@
   // -----------------------
   // Data model: platforms & services / blueprints
   // -----------------------
-const SCENARIO_DEFS = {
-    aws: {
+  const SCENARIO_DEFS = {
+     aws: {
       label: "Amazon Web Services (AWS)",
       scenarios: {
         ec2_instance: {
@@ -1315,7 +1315,7 @@ const SCENARIO_DEFS = {
       }
     },
 
-   azure: {
+    azure: {
       label: "Microsoft Azure",
       scenarios: {
         vm_linux: {
@@ -1962,8 +1962,7 @@ const SCENARIO_DEFS = {
         }
       }
     },
-
-     gcp: {
+ gcp: {
       label: "Google Cloud Platform",
       scenarios: {
         gce_instance: {
@@ -2456,7 +2455,7 @@ const SCENARIO_DEFS = {
       }
     },
 
-    oci: {
+ oci: {
       label: "Oracle Cloud Infrastructure (OCI)",
       scenarios: {
         compute_instance: {
@@ -2880,6 +2879,775 @@ const SCENARIO_DEFS = {
                       vault_id: "{{ vault_ocid }}",
                       display_name: "{{ key_display_name }}"
                     }
+                  }
+                ]
+              }
+            ];
+          }
+        }
+      }
+    },
+vmware: {
+      label: "VMware vSphere / vCenter",
+      scenarios: {
+        vsphere_vm_from_template: {
+          label: "Create VM from template",
+          description: "Provision a vSphere VM from an existing template with network and datastore settings.",
+          inputs: [
+            {
+              id: "vcenter_hostname",
+              label: "vCenter hostname or IP",
+              type: "text",
+              default: "vcenter.example.com",
+              hint: "API endpoint used by Ansible"
+            },
+            {
+              id: "vcenter_username",
+              label: "vCenter username",
+              type: "text",
+              default: "administrator@vsphere.local",
+              hint: "Use a service account in real environments"
+            },
+            {
+              id: "vcenter_password",
+              label: "vCenter password",
+              type: "text",
+              default: "ChangeMe123!",
+              hint: "Use Ansible Vault / cred store in reality"
+            },
+            {
+              id: "validate_certs",
+              label: "Validate TLS certs",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "true = require valid certs"
+            },
+            {
+              id: "datacenter_name",
+              label: "Datacenter name",
+              type: "text",
+              default: "DC1",
+              hint: "vSphere datacenter"
+            },
+            {
+              id: "cluster_name",
+              label: "Cluster name",
+              type: "text",
+              default: "Compute-Cluster",
+              hint: "Cluster where VM will run"
+            },
+            {
+              id: "template_name",
+              label: "Template name",
+              type: "text",
+              default: "golden-linux-template",
+              hint: "Existing VM template"
+            },
+            {
+              id: "vm_name",
+              label: "New VM name",
+              type: "text",
+              default: "court-app-01",
+              hint: "Resulting VM object name"
+            },
+            {
+              id: "datastore_name",
+              label: "Datastore",
+              type: "text",
+              default: "datastore1",
+              hint: "Primary datastore"
+            },
+            {
+              id: "vm_network",
+              label: "Portgroup / Network",
+              type: "text",
+              default: "VM Network",
+              hint: "Backed by standard or distributed switch"
+            },
+            {
+              id: "cpu_count",
+              label: "vCPUs",
+              type: "number",
+              default: 2,
+              hint: "Number of vCPUs"
+            },
+            {
+              id: "memory_mb",
+              label: "Memory (MB)",
+              type: "number",
+              default: 4096,
+              hint: "RAM in MB"
+            },
+            {
+              id: "disk_gb",
+              label: "Disk size (GB)",
+              type: "number",
+              default: 60,
+              hint: "Primary disk size (can be same as template for thin provisioning)"
+            },
+            {
+              id: "power_on",
+              label: "Power on after create",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "true",
+              hint: "Start VM immediately"
+            }
+          ],
+          buildPlay: (vals, hosts) => ([
+            {
+              name: "Create vSphere VM from template",
+              hosts,
+              gather_facts: false,
+              become: false,
+              vars: {
+                vcenter_hostname: vals.vcenter_hostname,
+                vcenter_username: vals.vcenter_username,
+                vcenter_password: vals.vcenter_password,
+                validate_certs: vals.validate_certs === "true",
+                datacenter_name: vals.datacenter_name,
+                cluster_name: vals.cluster_name,
+                template_name: vals.template_name,
+                vm_name: vals.vm_name,
+                datastore_name: vals.datastore_name,
+                vm_network: vals.vm_network,
+                cpu_count: Number(vals.cpu_count),
+                memory_mb: Number(vals.memory_mb),
+                disk_gb: Number(vals.disk_gb),
+                power_on: vals.power_on === "true"
+              },
+              tasks: [
+                {
+                  name: "Create or update VM from template",
+                  "community.vmware.vmware_guest": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    datacenter: "{{ datacenter_name }}",
+                    cluster: "{{ cluster_name }}",
+                    name: "{{ vm_name }}",
+                    template: "{{ template_name }}",
+                    datastore: "{{ datastore_name }}",
+                    state: "poweredon",
+                    hardware: {
+                      memory_mb: "{{ memory_mb }}",
+                      num_cpus: "{{ cpu_count }}"
+                    },
+                    disk: [
+                      {
+                        size_gb: "{{ disk_gb }}",
+                        type: "thin"
+                      }
+                    ],
+                    networks: [
+                      {
+                        name: "{{ vm_network }}"
+                      }
+                    ],
+                    wait_for_ip_address: false
+                  },
+                  register: "vm_result"
+                },
+                {
+                  name: "Ensure VM power state matches desired",
+                  "community.vmware.vmware_guest_powerstate": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    name: "{{ vm_name }}",
+                    state: "{{ 'powered-on' if power_on else 'powered-off' }}"
+                  }
+                }
+              ]
+            }
+          ])
+        },
+
+        vsphere_vm_power_and_snapshot: {
+          label: "VM power & snapshot management",
+          description: "Standardize power operations and snapshots for an existing VM.",
+          inputs: [
+            {
+              id: "vcenter_hostname",
+              label: "vCenter hostname or IP",
+              type: "text",
+              default: "vcenter.example.com",
+              hint: "Same as above"
+            },
+            {
+              id: "vcenter_username",
+              label: "vCenter username",
+              type: "text",
+              default: "automation@vsphere.local",
+              hint: "Service account"
+            },
+            {
+              id: "vcenter_password",
+              label: "vCenter password",
+              type: "text",
+              default: "ChangeMe123!",
+              hint: "Use Vault in prod"
+            },
+            {
+              id: "validate_certs",
+              label: "Validate TLS certs",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "true / false"
+            },
+            {
+              id: "datacenter_name",
+              label: "Datacenter name",
+              type: "text",
+              default: "DC1",
+              hint: "Optional but recommended"
+            },
+            {
+              id: "vm_name",
+              label: "Target VM name",
+              type: "text",
+              default: "court-app-01",
+              hint: "Existing VM"
+            },
+            {
+              id: "power_state",
+              label: "Desired power state",
+              control: "select",
+              options: [
+                { value: "powered-on", label: "Power on" },
+                { value: "powered-off", label: "Power off" },
+                { value: "restarted", label: "Restart" }
+              ],
+              default: "powered-on",
+              hint: "Standard lifecycle"
+            },
+            {
+              id: "snapshot_action",
+              label: "Snapshot action",
+              control: "select",
+              options: [
+                { value: "none", label: "None" },
+                { value: "create", label: "Create snapshot" },
+                { value: "revert", label: "Revert to snapshot" }
+              ],
+              default: "none",
+              hint: "Pick snapshot workflow"
+            },
+            {
+              id: "snapshot_name",
+              label: "Snapshot name",
+              type: "text",
+              default: "pre-change",
+              hint: "Used for create/revert when relevant"
+            },
+            {
+              id: "snapshot_description",
+              label: "Snapshot description",
+              type: "text",
+              default: "Automated snapshot before change",
+              hint: "For audit trail"
+            },
+            {
+              id: "remove_children",
+              label: "Remove child snapshots on revert",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "true / false"
+            }
+          ],
+          buildPlay: (vals, hosts) => ([
+            {
+              name: "Manage VM power state and snapshots",
+              hosts,
+              gather_facts: false,
+              become: false,
+              vars: {
+                vcenter_hostname: vals.vcenter_hostname,
+                vcenter_username: vals.vcenter_username,
+                vcenter_password: vals.vcenter_password,
+                validate_certs: vals.validate_certs === "true",
+                datacenter_name: vals.datacenter_name,
+                vm_name: vals.vm_name,
+                power_state: vals.power_state,
+                snapshot_action: vals.snapshot_action,
+                snapshot_name: vals.snapshot_name,
+                snapshot_description: vals.snapshot_description,
+                remove_children: vals.remove_children === "true"
+              },
+              tasks: [
+                {
+                  name: "Set VM power state",
+                  "community.vmware.vmware_guest_powerstate": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    name: "{{ vm_name }}",
+                    state: "{{ power_state }}",
+                    state_change_timeout: 300
+                  }
+                },
+                {
+                  name: "Create snapshot if requested",
+                  when: "snapshot_action == 'create'",
+                  "community.vmware.vmware_guest_snapshot": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    datacenter: "{{ datacenter_name | default(omit) }}",
+                    name: "{{ vm_name }}",
+                    state: "present",
+                    snapshot_name: "{{ snapshot_name }}",
+                    description: "{{ snapshot_description }}",
+                    memory: false,
+                    quiesce: true
+                  }
+                },
+                {
+                  name: "Revert to snapshot if requested",
+                  when: "snapshot_action == 'revert'",
+                  "community.vmware.vmware_guest_snapshot": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    datacenter: "{{ datacenter_name | default(omit) }}",
+                    name: "{{ vm_name }}",
+                    state: "reverted",
+                    snapshot_name: "{{ snapshot_name }}",
+                    remove_children: "{{ remove_children }}"
+                  }
+                }
+              ]
+            }
+          ])
+        },
+
+        vsphere_vm_reconfigure: {
+          label: "VM reconfigure (CPU/RAM/disk/network)",
+          description: "Adjust hardware and network settings for an existing VM.",
+          inputs: [
+            {
+              id: "vcenter_hostname",
+              label: "vCenter hostname or IP",
+              type: "text",
+              default: "vcenter.example.com",
+              hint: "Same as above"
+            },
+            {
+              id: "vcenter_username",
+              label: "vCenter username",
+              type: "text",
+              default: "automation@vsphere.local",
+              hint: "Service account"
+            },
+            {
+              id: "vcenter_password",
+              label: "vCenter password",
+              type: "text",
+              default: "ChangeMe123!",
+              hint: "Use Vault in prod"
+            },
+            {
+              id: "validate_certs",
+              label: "Validate TLS certs",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "true / false"
+            },
+            {
+              id: "datacenter_name",
+              label: "Datacenter name",
+              type: "text",
+              default: "DC1",
+              hint: "Optional"
+            },
+            {
+              id: "vm_name",
+              label: "VM name",
+              type: "text",
+              default: "court-app-01",
+              hint: "Existing VM"
+            },
+            {
+              id: "cpu_count",
+              label: "New vCPU count",
+              type: "number",
+              default: 4,
+              hint: "Leave same as current if no change"
+            },
+            {
+              id: "memory_mb",
+              label: "New memory (MB)",
+              type: "number",
+              default: 8192,
+              hint: "RAM in MB"
+            },
+            {
+              id: "disk_gb",
+              label: "New primary disk size (GB)",
+              type: "number",
+              default: 80,
+              hint: "Must be >= current size"
+            },
+            {
+              id: "vm_network",
+              label: "Network / portgroup",
+              type: "text",
+              default: "VM Network",
+              hint: "New network, or keep same"
+            }
+          ],
+          buildPlay: (vals, hosts) => ([
+            {
+              name: "Reconfigure vSphere VM",
+              hosts,
+              gather_facts: false,
+              become: false,
+              vars: {
+                vcenter_hostname: vals.vcenter_hostname,
+                vcenter_username: vals.vcenter_username,
+                vcenter_password: vals.vcenter_password,
+                validate_certs: vals.validate_certs === "true",
+                datacenter_name: vals.datacenter_name,
+                vm_name: vals.vm_name,
+                cpu_count: Number(vals.cpu_count),
+                memory_mb: Number(vals.memory_mb),
+                disk_gb: Number(vals.disk_gb),
+                vm_network: vals.vm_network
+              },
+              tasks: [
+                {
+                  name: "Resize CPU and memory",
+                  "community.vmware.vmware_guest": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    datacenter: "{{ datacenter_name | default(omit) }}",
+                    name: "{{ vm_name }}",
+                    state: "present",
+                    hardware: {
+                      num_cpus: "{{ cpu_count }}",
+                      memory_mb: "{{ memory_mb }}"
+                    }
+                  }
+                },
+                {
+                  name: "Resize disk if requested",
+                  "community.vmware.vmware_guest_disk": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    datacenter: "{{ datacenter_name | default(omit) }}",
+                    name: "{{ vm_name }}",
+                    disk: [
+                      {
+                        state: "present",
+                        size_gb: "{{ disk_gb }}",
+                        unit_number: 0
+                      }
+                    ]
+                  }
+                },
+                {
+                  name: "Update network if requested",
+                  "community.vmware.vmware_guest_network": {
+                    hostname: "{{ vcenter_hostname }}",
+                    username: "{{ vcenter_username }}",
+                    password: "{{ vcenter_password }}",
+                    validate_certs: "{{ validate_certs }}",
+                    datacenter: "{{ datacenter_name | default(omit) }}",
+                    name: "{{ vm_name }}",
+                    networks: [
+                      {
+                        name: "{{ vm_network }}"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ])
+        }
+      }
+    },
+
+    linux: {
+      label: "Generic Linux hosts",
+      scenarios: {
+        nginx_server: {
+          label: "Web – NGINX server",
+          description: "Install NGINX, enable service, and deploy a simple index page.",
+          inputs: [
+            {
+              id: "http_port",
+              label: "HTTP port",
+              type: "number",
+              default: "80",
+              hint: "e.g. 80, 8080"
+            },
+            {
+              id: "index_message",
+              label: "Index page message",
+              type: "text",
+              default: "Hello from Ansible",
+              hint: "Simple banner text"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Configure NGINX web server",
+                hosts,
+                become: true,
+                vars: {
+                  index_message: vals.index_message
+                },
+                tasks: [
+                  {
+                    name: "Install NGINX",
+                    "ansible.builtin.package": {
+                      name: "nginx",
+                      state: "present"
+                    }
+                  },
+                  {
+                    name: "Ensure NGINX running and enabled",
+                    "ansible.builtin.service": {
+                      name: "nginx",
+                      state: "started",
+                      enabled: true
+                    }
+                  },
+                  {
+                    name: "Deploy index page",
+                    "ansible.builtin.copy": {
+                      dest: "/usr/share/nginx/html/index.html",
+                      mode: "0644",
+                      content: "<html><body><h1>{{ index_message }}</h1></body></html>"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        linux_patch: {
+          label: "Ops – Security updates",
+          description: "Run package updates and reboot if required.",
+          inputs: [
+            {
+              id: "reboot_if_needed",
+              label: "Reboot if kernel updated",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "true",
+              hint: "true / false"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Apply Linux security updates",
+                hosts,
+                become: true,
+                vars: {
+                  reboot_if_needed: vals.reboot_if_needed === "true"
+                },
+                tasks: [
+                  {
+                    name: "Update packages to latest",
+                    "ansible.builtin.package": {
+                      name: "*",
+                      state: "latest"
+                    }
+                  },
+                  {
+                    name: "Check if reboot is required (Debian/Ubuntu)",
+                    "ansible.builtin.stat": {
+                      path: "/var/run/reboot-required"
+                    },
+                    register: "reboot_required_file",
+                    when: "ansible_os_family == 'Debian'"
+                  },
+                  {
+                    name: "Reboot if needed",
+                    "ansible.builtin.reboot": {},
+                    when: "reboot_if_needed and reboot_required_file.stat.exists | default(false)"
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        linux_users: {
+          label: "Identity – Users & groups",
+          description: "Manage local users, groups and SSH keys.",
+          inputs: [
+            { id: "group_name", label: "Group name", type: "text", default: "appusers", hint: "Primary group" },
+            { id: "username", label: "User name", type: "text", default: "deploy", hint: "Login user" },
+            {
+              id: "shell",
+              label: "Shell",
+              control: "select",
+              options: [
+                { value: "/bin/bash", label: "/bin/bash" },
+                { value: "/bin/zsh", label: "/bin/zsh" },
+                { value: "/bin/sh", label: "/bin/sh" }
+              ],
+              default: "/bin/bash",
+              hint: "Default shell"
+            },
+            { id: "ssh_pubkey", label: "SSH public key", type: "text", default: "ssh-ed25519 AAAA...", hint: "User key" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Create Linux users & groups",
+                hosts,
+                become: true,
+                vars: {
+                  group_name: vals.group_name,
+                  username: vals.username,
+                  user_shell: vals.shell,
+                  ssh_pubkey: vals.ssh_pubkey
+                },
+                tasks: [
+                  {
+                    name: "Ensure group exists",
+                    "ansible.builtin.group": {
+                      name: "{{ group_name }}",
+                      state: "present"
+                    }
+                  },
+                  {
+                    name: "Ensure user exists",
+                    "ansible.builtin.user": {
+                      name: "{{ username }}",
+                      group: "{{ group_name }}",
+                      shell: "{{ user_shell }}",
+                      create_home: true
+                    }
+                  },
+                  {
+                    name: "Install authorized key",
+                    "ansible.posix.authorized_key": {
+                      user: "{{ username }}",
+                      state: "present",
+                      key: "{{ ssh_pubkey }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        linux_cron_backup: {
+          label: "Ops – Cron job (backup script)",
+          description: "Install a cron job to run a backup script on a schedule.",
+          inputs: [
+            { id: "user", label: "Run as user", type: "text", default: "root", hint: "User for cron" },
+            { id: "job_name", label: "Job name", type: "text", default: "nightly-backup", hint: "Identifier" },
+            { id: "schedule", label: "Cron schedule", type: "text", default: "0 2 * * *", hint: "Standard cron string" },
+            { id: "command", label: "Command", type: "text", default: "/usr/local/bin/backup.sh", hint: "Script or command" }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Configure backup cron job",
+                hosts,
+                become: true,
+                vars: {
+                  cron_user: vals.user,
+                  job_name: vals.job_name,
+                  schedule: vals.schedule,
+                  command: vals.command
+                },
+                tasks: [
+                  {
+                    name: "Install cron job",
+                    "ansible.builtin.cron": {
+                      user: "{{ cron_user }}",
+                      name: "{{ job_name }}",
+                      job: "{{ command }}",
+                      special_time: "absent",
+                      minute: "{{ schedule.split(' ')[0] }}",
+                      hour: "{{ schedule.split(' ')[1] }}",
+                      day: "{{ schedule.split(' ')[2] }}",
+                      month: "{{ schedule.split(' ')[3] }}",
+                      weekday: "{{ schedule.split(' ')[4] }}"
+                    }
+                  }
+                ]
+              }
+            ];
+          }
+        },
+        linux_harden_ssh: {
+          label: "Security – Harden SSH",
+          description: "Apply basic SSH hardening to sshd_config.",
+          inputs: [
+            {
+              id: "allow_password_auth",
+              label: "Allow password auth",
+              control: "select",
+              options: BOOL_OPTIONS,
+              default: "false",
+              hint: "Prefer false for security"
+            }
+          ],
+          buildPlay: (vals, hosts) => {
+            return [
+              {
+                name: "Harden SSH configuration",
+                hosts,
+                become: true,
+                vars: {
+                  allow_password_auth: vals.allow_password_auth === "true"
+                },
+                tasks: [
+                  {
+                    name: "Ensure SSHD config present",
+                    "ansible.builtin.lineinfile": {
+                      path: "/etc/ssh/sshd_config",
+                      regexp: "^PasswordAuthentication",
+                      line: "PasswordAuthentication {{ 'yes' if allow_password_auth else 'no' }}",
+                      backup: true
+                    }
+                  },
+                  {
+                    name: "Disable root login via SSH",
+                    "ansible.builtin.lineinfile": {
+                      path: "/etc/ssh/sshd_config",
+                      regexp: "^PermitRootLogin",
+                      line: "PermitRootLogin prohibit-password",
+                      backup: true
+                    }
+                  },
+                  {
+                    name: "Restart SSH service",
+                    "ansible.builtin.service": {
+                      name: "ssh",
+                      state: "restarted"
+                    },
+                    when: "ansible_service_mgr != 'systemd' or ansible_os_family != 'RedHat'"
+                  },
+                  {
+                    name: "Restart sshd service",
+                    "ansible.builtin.service": {
+                      name: "sshd",
+                      state: "restarted"
+                    },
+                    when: "ansible_service_mgr == 'systemd' and ansible_os_family == 'RedHat'"
                   }
                 ]
               }
