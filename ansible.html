@@ -343,7 +343,19 @@
       font-size: 11px;
     }
 
-    .btn-icon {
+    
+/* Main menu return button */
+.btn-mainmenu{
+  border-color: rgba(148,163,184,.28);
+  background: rgba(2,6,23,.18);
+  color: rgba(226,232,240,.78);
+  font-weight: 650;
+}
+.btn-mainmenu:hover{
+  border-color: rgba(56,189,248,.38);
+  color: rgba(226,232,240,.92);
+}
+.btn-icon {
       width: 22px;
       height: 22px;
       border-radius: 999px;
@@ -488,7 +500,9 @@
       </p>
     </div>
     <div class="app-header-controls">
-      <div class="format-toggle" id="formatToggle">
+      
+      <button type="button" class="btn btn-sm btn-mainmenu" onclick="window.location.href='index.html'">← Main menu</button>
+<div class="format-toggle" id="formatToggle">
         <button type="button" data-format="yaml" class="active">
           <span class="icon">🧾</span> YAML
         </button>

@@ -293,7 +293,19 @@
 
     .btn-sm { padding: 4px 8px; font-size: 11px; }
 
-    .code-panel {
+    
+/* Main menu return button */
+.btn-mainmenu{
+  border-color: rgba(148,163,184,.28);
+  background: rgba(2,6,23,.18);
+  color: rgba(226,232,240,.78);
+  font-weight: 650;
+}
+.btn-mainmenu:hover{
+  border-color: rgba(56,189,248,.38);
+  color: rgba(226,232,240,.92);
+}
+.code-panel {
       background: linear-gradient(145deg, #020617 0, #020617 40%, #020617 100%);
       border-radius: var(--radius-lg);
       border: 1px solid rgba(15,23,42,0.95);
@@ -424,7 +436,9 @@
       </p>
     </div>
     <div class="app-header-controls">
-      <div class="hint-chip">
+      
+      <button type="button" class="btn btn-sm btn-mainmenu" onclick="window.location.href='index.html'">← Main menu</button>
+<div class="hint-chip">
         <span class="dot"></span>
         <span>All blueprints live in <code>TERRA_DEFS</code>. Extend platforms / services there.</span>
       </div>
